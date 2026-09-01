@@ -34,9 +34,9 @@ Every feature belongs to one of these. Anything that did not was cut.
 | M1 | Bulk and single upload, drag-and-drop, folder drop | not started |
 | M2 | Upload queue with bounded concurrency, per-file and aggregate progress, pause/cancel | not started |
 | M3 | Processing progress over SSE — pending → processing → terminal | stream + client subscription done |
-| M4 | Virtualised document table, server-side filter/sort/search | API done, UI not started |
-| M5 | Status summary, click-through to a filtered view | counters done, click-through not started |
-| M6 | Detail panel with per-field confidence, addressable by URL | API done, UI not started |
+| M4 | Virtualised document table, server-side filter/sort/search | done |
+| M5 | Status summary, click-through to a filtered view | done |
+| M6 | Detail panel with per-field confidence, addressable by URL | read path done; inline correction is M8 |
 | M7 | Failure handling — error taxonomy, single and bulk retry, backoff | API done, UI not started |
 | M8 | Review flow — low-confidence fields flagged, corrected inline | API done, UI not started |
 | M9 | Scale mode — expand the archive to 100,000 documents on demand | done |
@@ -120,6 +120,19 @@ a text label (WCAG 1.4.1).
 - No `any`, no `as` casts at boundaries — `unknown` plus a parse instead.
 - Branded id types were tried and removed: with fixtures and route params they
   cost a cast at every construction site and paid back nothing at this scale.
+
+## No headless table library
+
+`@tanstack/react-table` was installed and then removed. The column set is
+fixed, and sorting, filtering and paging all happen on the server, so the
+library would have contributed a layer of state without removing one. What the
+list actually needed was virtualisation, which is a different package.
+
+The rows are therefore a CSS grid with explicit ARIA (`role="grid"`,
+`aria-rowcount`, `aria-rowindex`) rather than a `<table>`. Absolutely
+positioned rows inside a `<tbody>` are unreliable across browsers, and the ARIA
+grid pattern is the one that can honestly say "row 5,231 of 100,000" when only
+thirty rows exist in the DOM.
 
 ## Environment variables
 

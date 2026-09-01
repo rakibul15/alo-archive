@@ -4,9 +4,10 @@ A frontend prototype for digitising the Alo Relief Trust document archive:
 upload documents in bulk, watch them move through processing, and review the
 records that came out uncertain.
 
-> **Status: in progress.** The domain model, the mock backend and the API layer
-> are complete and covered by tests; the upload, table, detail and review
-> screens are being built on top of them. `ASSUMPTIONS.md` tracks what is done.
+> **Status: in progress.** The domain model, the mock backend, the API layer,
+> the document table and the read-only detail panel are done and covered by
+> tests. Upload (M1–M2), bulk retry (M7) and inline correction (M8) are still
+> to come. `ASSUMPTIONS.md` tracks the state of each item.
 
 ## Running it
 
@@ -92,6 +93,13 @@ retries and whether the UI offers a retry button, so the two cannot disagree.
 - Pagination is **keyset**, not offset: the cursor carries the sort key of the
   last row seen. Rows changing status mid-scroll therefore cannot shift the
   window and make the virtualiser skip or repeat entries.
+- The table renders about 30 rows for a 100,000-row result set. It is an ARIA
+  grid rather than a `<table>` — `aria-rowcount` reports the real total and
+  each row carries its true `aria-rowindex`, so a screen reader is told "row
+  5,231 of 100,000" even though row 5,231 is one of thirty in the DOM.
+- Below 768px the same virtualiser renders cards instead of grid rows. The
+  table is never given a horizontal scrollbar; that is the lazy answer and a
+  bad one to use.
 
 ### Realtime without the flood
 
