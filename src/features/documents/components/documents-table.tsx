@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import type { UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDownIcon, ArrowUpIcon, FileSearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Empty,
   EmptyDescription,
@@ -17,22 +18,23 @@ import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { describeError } from '@/lib/api/errors';
 import {
+  ERROR_CATALOGUE,
   type DocumentFilters,
   type DocumentSort,
   type DocumentSummary,
 } from '@/lib/domain/document';
 import { DOCUMENT_TYPE_LABELS } from '@/lib/domain/status-config';
-import { documentListOptions } from '../api/queries';
 import { useIsCompact } from '../hooks/use-media-query';
+import type { useSelection } from '../hooks/use-selection';
 import { ConfidenceIndicator } from './confidence-indicator';
 import { StatusBadge } from './status-badge';
 
 /** Shared by the header and every row so the columns cannot drift apart. */
 const COLUMN_TEMPLATE =
-  'grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.5fr)_9rem_9.5rem_8rem] items-center gap-4 px-4';
+  'grid grid-cols-[2.25rem_minmax(0,2.1fr)_minmax(0,1.5fr)_9rem_9.5rem_8rem] items-center gap-4 px-4';
 
 const ROW_HEIGHT = 56;
-const CARD_HEIGHT = 116;
+const CARD_HEIGHT = 124;
 /** Rows rendered beyond the viewport, so fast scrolling does not tear. */
 const OVERSCAN = 8;
 
@@ -54,33 +56,44 @@ const COLUMNS: readonly {
   sort: DocumentSort | null;
 }[] = [
   { id: 'document', label: 'Document', sort: 'fileName' },
-  { id: 'person', label: 'Name / programme', sort: null },
+  { id: 'person', label: 'Name / outcome', sort: null },
   { id: 'status', label: 'Status', sort: 'status' },
   { id: 'confidence', label: 'Confidence', sort: 'confidence' },
   { id: 'uploaded', label: 'Uploaded', sort: 'uploadedAt' },
 ];
 
+type SelectionApi = ReturnType<typeof useSelection>;
+
 export function DocumentsTable({
+  query,
+  items,
+  matchedCount,
+  totalCount,
   filters,
   toggleSort,
   isFiltered,
   onResetFilters,
   selectedId,
   onOpen,
+  selection,
 }: {
+  query: UseInfiniteQueryResult<unknown>;
+  items: DocumentSummary[];
+  matchedCount: number;
+  totalCount: number;
   filters: DocumentFilters;
   toggleSort: (sort: DocumentSort) => void;
   isFiltered: boolean;
   onResetFilters: () => void;
   selectedId: string | null;
   onOpen: (id: string) => void;
+  selection: SelectionApi;
 }) {
   const isCompact = useIsCompact();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const {
-    data,
     error,
     isPending,
     isError,
@@ -88,12 +101,7 @@ export function DocumentsTable({
     isFetchingNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteQuery(documentListOptions(filters));
-
-  const items: DocumentSummary[] =
-    data?.pages.flatMap((page) => page.items) ?? [];
-  const matchedCount = data?.pages[0]?.matchedCount ?? 0;
-  const totalCount = data?.pages[0]?.totalCount ?? 0;
+  } = query;
 
   const rowHeight = isCompact ? CARD_HEIGHT : ROW_HEIGHT;
 
@@ -152,11 +160,14 @@ export function DocumentsTable({
   );
 
   // A new filter is a new result set; keeping the old cursor position would
-  // scroll to an unrelated row.
-  useEffect(() => {
+  // scroll to an unrelated row. Adjusted during render rather than in an
+  // effect so the stale index is never painted.
+  const [lastFilters, setLastFilters] = useState(filters);
+  if (lastFilters !== filters) {
+    setLastFilters(filters);
     activeIndexRef.current = 0;
     setActiveIndex(0);
-  }, [filters]);
+  }
 
   /**
    * Arrow-key navigation over a virtualised grid. Rows that are not rendered
@@ -165,6 +176,8 @@ export function DocumentsTable({
    */
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const current = activeIndexRef.current;
+    const row = items[current];
+
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
@@ -191,14 +204,18 @@ export function DocumentsTable({
         moveActive(items.length - 1);
         break;
       case 'Enter':
-      case ' ': {
-        const row = items[current];
         if (row) {
           event.preventDefault();
           onOpen(row.id);
         }
         break;
-      }
+      case ' ':
+        // Space ticks the row, matching every other multi-select list.
+        if (row) {
+          event.preventDefault();
+          selection.toggleRow(row.id);
+        }
+        break;
       default:
         break;
     }
@@ -261,6 +278,15 @@ export function DocumentsTable({
             'h-10 shrink-0 border-y border-border bg-muted/40 text-xs font-medium text-muted-foreground',
           )}
         >
+          <Checkbox
+            checked={
+              selection.checkState === 'indeterminate'
+                ? 'indeterminate'
+                : selection.checkState === 'checked'
+            }
+            onCheckedChange={selection.toggleAllRows}
+            aria-label={`Select all ${numberFormat.format(matchedCount)} matching documents`}
+          />
           {COLUMNS.map((column) => {
             const sortKey = column.sort;
             if (sortKey === null) {
@@ -299,7 +325,8 @@ export function DocumentsTable({
         // Screen readers are told the size of the whole result set, not the
         // thirty-odd rows that happen to exist in the DOM.
         aria-rowcount={matchedCount}
-        aria-colcount={COLUMNS.length}
+        aria-colcount={COLUMNS.length + 1}
+        aria-multiselectable
         aria-label="Documents"
         onKeyDown={onKeyDown}
       >
@@ -333,7 +360,11 @@ export function DocumentsTable({
                 rowIndex={virtualRow.index}
                 isCompact={isCompact}
                 isActive={virtualRow.index === activeIndex}
-                isSelected={item.id === selectedId}
+                isOpen={item.id === selectedId}
+                isChecked={selection.isRowSelected(item.id)}
+                onToggle={() => {
+                  selection.toggleRow(item.id);
+                }}
                 height={virtualRow.size}
                 offset={virtualRow.start}
                 onOpen={() => {
@@ -364,12 +395,47 @@ export function DocumentsTable({
   );
 }
 
+/**
+ * The second column carries the extracted name for processed documents and the
+ * failure reason for failed ones. Those rows have no name to show, and the
+ * alternative — a bare "Failed" badge — makes the operator open each row to
+ * find out whether it is worth retrying.
+ */
+function RowOutcome({ item }: { item: DocumentSummary }) {
+  if (item.errorCode) {
+    const error = ERROR_CATALOGUE[item.errorCode];
+    return (
+      <>
+        <span className="block truncate">{error.title}</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {error.retryable ? 'Can be retried' : 'Needs a different file'}
+        </span>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <span className="block truncate">
+        {item.personName ?? (
+          <span className="text-muted-foreground">Not extracted</span>
+        )}
+      </span>
+      <span className="block truncate text-xs text-muted-foreground">
+        {item.programName ?? '—'}
+      </span>
+    </>
+  );
+}
+
 function DocumentRow({
   item,
   rowIndex,
   isCompact,
   isActive,
-  isSelected,
+  isOpen,
+  isChecked,
+  onToggle,
   height,
   offset,
   onOpen,
@@ -378,7 +444,9 @@ function DocumentRow({
   rowIndex: number;
   isCompact: boolean;
   isActive: boolean;
-  isSelected: boolean;
+  isOpen: boolean;
+  isChecked: boolean;
+  onToggle: () => void;
   height: number;
   offset: number;
   onOpen: () => void;
@@ -399,7 +467,8 @@ function DocumentRow({
   const shared = cn(
     'absolute inset-x-0 cursor-pointer border-b border-border text-sm',
     'hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset',
-    isSelected && 'bg-muted',
+    isOpen && 'bg-muted',
+    isChecked && 'bg-primary/5',
   );
 
   const common = {
@@ -407,11 +476,32 @@ function DocumentRow({
     role: 'row' as const,
     // +1 because aria-rowindex is 1-based and the header occupies row 1.
     'aria-rowindex': rowIndex + 2,
-    'aria-selected': isSelected,
+    'aria-selected': isChecked,
     tabIndex: isActive ? 0 : -1,
     style: { height, transform: `translateY(${offset}px)` },
     onClick: onOpen,
   };
+
+  // The checkbox lives inside a row whose click opens the panel, so its own
+  // events must not bubble — ticking a row and opening it are different intents.
+  const checkbox = (
+    <span
+      role="gridcell"
+      onClick={(event) => {
+        event.stopPropagation();
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+      }}
+    >
+      <Checkbox
+        checked={isChecked}
+        onCheckedChange={onToggle}
+        tabIndex={-1}
+        aria-label={`Select ${item.fileName}`}
+      />
+    </span>
+  );
 
   if (isCompact) {
     return (
@@ -419,8 +509,9 @@ function DocumentRow({
         {...common}
         className={cn(shared, 'flex flex-col gap-1.5 px-4 py-3')}
       >
-        <div className="flex items-start justify-between gap-2">
-          <span role="gridcell" className="truncate font-medium">
+        <div className="flex items-start gap-3">
+          {checkbox}
+          <span role="gridcell" className="min-w-0 flex-1 truncate font-medium">
             {item.personName ?? item.fileName}
           </span>
           <span role="gridcell">
@@ -429,11 +520,11 @@ function DocumentRow({
         </div>
         <span
           role="gridcell"
-          className="truncate font-mono text-xs text-muted-foreground"
+          className="truncate pl-7 font-mono text-xs text-muted-foreground"
         >
           {item.fileName}
         </span>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 pl-7">
           <span role="gridcell">
             <ConfidenceIndicator value={item.confidence} />
           </span>
@@ -447,6 +538,7 @@ function DocumentRow({
 
   return (
     <div {...common} className={cn(shared, COLUMN_TEMPLATE)}>
+      {checkbox}
       <span role="gridcell" className="min-w-0">
         <span className="block truncate font-medium">{item.fileName}</span>
         <span className="block truncate font-mono text-xs text-muted-foreground">
@@ -454,14 +546,7 @@ function DocumentRow({
         </span>
       </span>
       <span role="gridcell" className="min-w-0">
-        <span className="block truncate">
-          {item.personName ?? (
-            <span className="text-muted-foreground">Not extracted</span>
-          )}
-        </span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {item.programName ?? '—'}
-        </span>
+        <RowOutcome item={item} />
       </span>
       <span role="gridcell">
         <StatusBadge status={item.status} />
@@ -489,6 +574,7 @@ function TableSkeleton({ isCompact }: { isCompact: boolean }) {
           )}
           style={{ height: isCompact ? CARD_HEIGHT : ROW_HEIGHT }}
         >
+          {!isCompact && <Skeleton className="size-4" />}
           <Skeleton className="h-4 w-full max-w-[16rem]" />
           {!isCompact && (
             <>

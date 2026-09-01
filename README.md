@@ -4,10 +4,10 @@ A frontend prototype for digitising the Alo Relief Trust document archive:
 upload documents in bulk, watch them move through processing, and review the
 records that came out uncertain.
 
-> **Status: in progress.** The domain model, the mock backend, the API layer,
-> the document table and the read-only detail panel are done and covered by
-> tests. Upload (M1–M2), bulk retry (M7) and inline correction (M8) are still
-> to come. `ASSUMPTIONS.md` tracks the state of each item.
+> **Status: in progress.** Everything except upload is done and covered by
+> tests — browsing, filtering, the detail panel, failure handling and the
+> review loop. Upload (M1–M2) is the remaining piece. `ASSUMPTIONS.md` tracks
+> the state of each item.
 
 ## Running it
 
@@ -129,6 +129,34 @@ around individual widgets so one broken panel does not take the page with it,
 and ordinary query/row state for everything the domain expects. The upload
 queue sits outside all of them — no React boundary catches an async callback —
 so it handles its own failures explicitly.
+
+Failed rows carry their reason in the list, not just a red badge, and say
+whether it is worth retrying. Retryability is a property of the error code
+rather than a flag: `OCR_TIMEOUT` can be retried, `PASSWORD_PROTECTED` never
+can, and a retry button that cannot succeed teaches people to distrust every
+retry button.
+
+### Bulk actions carry the query, not the ids
+
+Selection is a mode plus a small exception set, so "select all 100,000, untick
+three" is three strings. "Retry all failed" therefore posts the filter and the
+exceptions — **113 bytes**, the same at 182 rows or 100,000 — and the server
+resolves the set where it already lives. The reply is counts broken down by
+error code, so the toast can say *why* 117 documents were refused.
+
+### The review loop
+
+Low-confidence and missing fields are flagged in place and corrected in place;
+a correction is pinned to full confidence, marked `corrected`, and if it lifts
+the document above the review threshold it leaves the queue on its own. The
+panel steps document to document, because sending someone back to the list
+between each one is the difference between clearing forty and clearing four.
+
+Escape during an edit cancels the edit and does not close the panel — Radix
+owns dismissal above React's tree, so the interception has to happen on the
+sheet's `onEscapeKeyDown` rather than on the input. Focus returns to the
+control that opened the editor, from an effect rather than the cancel handler,
+because that button is unmounted while the editor is open.
 
 ### Colour
 

@@ -36,9 +36,9 @@ Every feature belongs to one of these. Anything that did not was cut.
 | M3 | Processing progress over SSE — pending → processing → terminal | stream + client subscription done |
 | M4 | Virtualised document table, server-side filter/sort/search | done |
 | M5 | Status summary, click-through to a filtered view | done |
-| M6 | Detail panel with per-field confidence, addressable by URL | read path done; inline correction is M8 |
-| M7 | Failure handling — error taxonomy, single and bulk retry, backoff | API done, UI not started |
-| M8 | Review flow — low-confidence fields flagged, corrected inline | API done, UI not started |
+| M6 | Detail panel with per-field confidence, addressable by URL | done |
+| M7 | Failure handling — error taxonomy, single and bulk retry, backoff | done |
+| M8 | Review flow — low-confidence fields flagged, corrected inline | done |
 | M9 | Scale mode — expand the archive to 100,000 documents on demand | done |
 
 **Deliberately not built**: authentication, a database, real OCR, multi-tenancy,
@@ -120,6 +120,25 @@ a text label (WCAG 1.4.1).
 - No `any`, no `as` casts at boundaries — `unknown` plus a parse instead.
 - Branded id types were tried and removed: with fixtures and route params they
   cost a cast at every construction site and paid back nothing at this scale.
+
+## Bulk actions send a query, not an id list
+
+Selection is a mode plus a small exception set — `include` (nothing but these)
+or `exclude` (everything matching the filter but these) — rather than an array
+of selected ids.
+
+The array version breaks the moment somebody ticks "select all" against 100,000
+matching rows: building it means fetching every id, holding 100,000 strings, and
+posting them back on the next action. And "select all, then untick three" is the
+case it handles worst.
+
+So "retry all 182 failed" posts `{ filter, except: [] }` — 113 bytes, and the
+same 113 bytes at 100,000 rows. The set is resolved on the server, where it
+already lives. `POST /api/documents/retry` accepts either shape.
+
+The response is counts, not ids, broken down by error code, so the UI can say
+"65 re-queued · 117 cannot be retried (27 unsupported file type, 34 file is
+unreadable, 26 password protected, 30 too many pages)" instead of shrugging.
 
 ## No headless table library
 

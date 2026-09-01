@@ -1,9 +1,17 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileWarningIcon } from 'lucide-react';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  FileWarningIcon,
+  PencilIcon,
+  RotateCcwIcon,
+} from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Sheet,
   SheetContent,
@@ -12,6 +20,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { describeError } from '@/lib/api/errors';
 import {
@@ -21,6 +30,7 @@ import {
   EXTRACTED_FIELD_KEYS,
   FIELD_LABELS,
   type DocumentRecord,
+  type ExtractedFieldKey,
   type FieldValue,
 } from '@/lib/domain/document';
 import {
@@ -28,6 +38,10 @@ import {
   DOCUMENT_TYPE_LABELS,
 } from '@/lib/domain/status-config';
 import { documentDetailOptions } from '../api/queries';
+import {
+  useCorrectField,
+  useRetryDocuments,
+} from '../hooks/use-document-mutations';
 import { ConfidenceIndicator } from './confidence-indicator';
 import { StatusBadge } from './status-badge';
 
@@ -44,29 +58,78 @@ const byteFormat = new Intl.NumberFormat('en-GB', {
 
 export function DocumentDetailSheet({
   documentId,
+  orderedIds,
+  onNavigate,
   onClose,
 }: {
   documentId: string | null;
+  /** The ids currently on screen, so review can move document to document. */
+  orderedIds: readonly string[];
+  onNavigate: (id: string) => void;
   onClose: () => void;
 }) {
+  /**
+   * Which field, if any, is being corrected right now.
+   *
+   * It lives up here rather than inside the field because Escape has to mean
+   * two different things depending on it: cancel the edit, or close the panel.
+   * Radix owns dismissal at the `SheetContent` level and registers its listener
+   * outside React's tree, so `stopPropagation` on the input never reaches it —
+   * the only reliable intercept is `onEscapeKeyDown` on the content itself.
+   * Getting this wrong loses the operator's place in the review queue every
+   * time they change their mind about an edit.
+   */
+  const [editingField, setEditingField] = useState<ExtractedFieldKey | null>(
+    null,
+  );
+
   return (
     <Sheet
       open={documentId !== null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) {
+          setEditingField(null);
+          onClose();
+        }
       }}
     >
       <SheetContent
         side="right"
         className="w-full gap-0 overflow-y-auto sm:max-w-lg"
+        onEscapeKeyDown={(event) => {
+          if (editingField !== null) event.preventDefault();
+        }}
       >
-        {documentId === null ? null : <DetailBody documentId={documentId} />}
+        {documentId === null ? null : (
+          <DetailBody
+            documentId={documentId}
+            orderedIds={orderedIds}
+            onNavigate={(id) => {
+              setEditingField(null);
+              onNavigate(id);
+            }}
+            editingField={editingField}
+            onEditingChange={setEditingField}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
 }
 
-function DetailBody({ documentId }: { documentId: string }) {
+function DetailBody({
+  documentId,
+  orderedIds,
+  onNavigate,
+  editingField,
+  onEditingChange,
+}: {
+  documentId: string;
+  orderedIds: readonly string[];
+  onNavigate: (id: string) => void;
+  editingField: ExtractedFieldKey | null;
+  onEditingChange: (field: ExtractedFieldKey | null) => void;
+}) {
   const { data, isPending, isError, error, refetch } = useQuery(
     documentDetailOptions(documentId),
   );
@@ -111,10 +174,39 @@ function DetailBody({ documentId }: { documentId: string }) {
     );
   }
 
-  return <DetailContent record={data} />;
+  return (
+    <DetailContent
+      record={data}
+      orderedIds={orderedIds}
+      onNavigate={onNavigate}
+      editingField={editingField}
+      onEditingChange={onEditingChange}
+    />
+  );
 }
 
-function DetailContent({ record }: { record: DocumentRecord }) {
+function DetailContent({
+  record,
+  orderedIds,
+  onNavigate,
+  editingField,
+  onEditingChange,
+}: {
+  record: DocumentRecord;
+  orderedIds: readonly string[];
+  onNavigate: (id: string) => void;
+  editingField: ExtractedFieldKey | null;
+  onEditingChange: (field: ExtractedFieldKey | null) => void;
+}) {
+  const retry = useRetryDocuments();
+
+  const position = orderedIds.indexOf(record.id);
+  const previousId = position > 0 ? orderedIds[position - 1] : undefined;
+  const nextId =
+    position >= 0 && position < orderedIds.length - 1
+      ? orderedIds[position + 1]
+      : undefined;
+
   return (
     <>
       <SheetHeader className="gap-2">
@@ -124,9 +216,45 @@ function DetailContent({ record }: { record: DocumentRecord }) {
         <SheetDescription>
           {record.id} · {DOCUMENT_TYPE_LABELS[record.documentType]}
         </SheetDescription>
+
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <StatusBadge status={record.status} />
           <ConfidenceIndicator value={record.confidence} />
+
+          {/*
+            Working a review queue means going document to document. Sending the
+            operator back to the list between each one is the difference between
+            clearing 40 documents and clearing four.
+          */}
+          {position >= 0 && orderedIds.length > 1 ? (
+            <span className="ml-auto flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={previousId === undefined}
+                onClick={() => {
+                  if (previousId) onNavigate(previousId);
+                }}
+              >
+                <ChevronLeftIcon aria-hidden />
+                <span className="sr-only">Previous document</span>
+              </Button>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {position + 1} / {orderedIds.length}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={nextId === undefined}
+                onClick={() => {
+                  if (nextId) onNavigate(nextId);
+                }}
+              >
+                <ChevronRightIcon aria-hidden />
+                <span className="sr-only">Next document</span>
+              </Button>
+            </span>
+          ) : null}
         </div>
       </SheetHeader>
 
@@ -139,25 +267,54 @@ function DetailContent({ record }: { record: DocumentRecord }) {
               <p>{record.error.message}</p>
               <p className="text-muted-foreground">
                 {record.error.retryable
-                  ? `Attempt ${record.error.attempts} — this can be retried.`
-                  : 'This cannot be resolved by retrying; the file itself has to change.'}
+                  ? `Attempt ${record.error.attempts}.`
+                  : 'Retrying will fail the same way — the file itself has to change.'}
               </p>
+              {record.error.retryable ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  disabled={retry.isPending}
+                  onClick={() => {
+                    retry.mutate({ kind: 'ids', ids: [record.id] });
+                  }}
+                >
+                  {retry.isPending ? (
+                    <Spinner />
+                  ) : (
+                    <RotateCcwIcon aria-hidden />
+                  )}
+                  Retry this document
+                </Button>
+              ) : null}
             </AlertDescription>
           </Alert>
         ) : null}
 
         {record.extracted ? (
           <section className="space-y-2">
-            <h3 className="text-sm font-medium">Extracted fields</h3>
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="text-sm font-medium">Extracted fields</h3>
+              {record.status === 'needs_review' ? (
+                <p className="text-xs text-status-needs-review">
+                  Correct the flagged fields to clear this document
+                </p>
+              ) : null}
+            </div>
             <dl className="divide-y divide-border">
               {EXTRACTED_FIELD_KEYS.map((key) => (
                 <FieldRow
                   key={key}
+                  documentId={record.id}
+                  fieldKey={key}
                   label={FIELD_LABELS[key]}
                   field={record.extracted?.[key]}
                   formatValue={
                     key === 'documentType' ? documentTypeLabel : undefined
                   }
+                  isEditing={editingField === key}
+                  onEditingChange={onEditingChange}
                 />
               ))}
             </dl>
@@ -192,11 +349,6 @@ function DetailContent({ record }: { record: DocumentRecord }) {
 }
 
 /**
- * The point of this row is the `raw` line. When OCR is unsure, showing only the
- * cleaned-up guess hides the fact that there was a guess at all — the operator
- * needs to see what was actually on the page to judge it.
- */
-/**
  * `documentType` is extracted as a machine value; showing the raw enum to an
  * operator is a leak, not a detail.
  */
@@ -205,15 +357,53 @@ function documentTypeLabel(value: string): string {
   return parsed.success ? DOCUMENT_TYPE_LABELS[parsed.data] : value;
 }
 
+/**
+ * A field, with the two things the brief asks the interface to make visible:
+ * what OCR actually saw, and how sure it is. Anything flagged can be corrected
+ * in place — sending someone to a separate edit screen to fix one smudged phone
+ * number is how review queues stop getting worked.
+ */
 function FieldRow({
+  documentId,
+  fieldKey,
   label,
   field,
   formatValue,
+  isEditing,
+  onEditingChange,
 }: {
+  documentId: string;
+  fieldKey: ExtractedFieldKey;
   label: string;
   field: FieldValue | undefined;
   formatValue?: (value: string) => string;
+  isEditing: boolean;
+  onEditingChange: (field: ExtractedFieldKey | null) => void;
 }) {
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const correct = useCorrectField();
+
+  /**
+   * Focus follows the editor in and back out again.
+   *
+   * The return leg has to happen here rather than in the cancel handler: the
+   * trigger button is unmounted while the editor is open, so at the moment
+   * cancel runs `triggerRef` still points at a detached node and focusing it
+   * does nothing — leaving keyboard users dumped on the panel container.
+   */
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (isEditing) {
+      wasEditing.current = true;
+      inputRef.current?.focus();
+    } else if (wasEditing.current) {
+      wasEditing.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [isEditing]);
+
   if (!field) return null;
 
   const band = confidenceBand(field.confidence);
@@ -221,36 +411,116 @@ function FieldRow({
   const uncertain =
     field.status === 'low_confidence' || field.status === 'missing';
 
+  const startEditing = () => {
+    setDraft(field.value ?? field.raw ?? '');
+    onEditingChange(fieldKey);
+  };
+
+  const cancel = () => {
+    onEditingChange(null);
+  };
+
+  const save = () => {
+    const value = draft.trim();
+    if (value === '' || value === field.value) {
+      cancel();
+      return;
+    }
+    correct.mutate(
+      { id: documentId, field: fieldKey, value },
+      {
+        onSuccess: () => {
+          onEditingChange(null);
+        },
+      },
+    );
+  };
+
   return (
-    <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-start gap-3 py-3">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-3 py-3">
+      <dt className="pt-1 text-sm text-muted-foreground">{label}</dt>
       <dd className="space-y-1">
-        <p
-          className={cn(
-            'text-sm break-words',
-            field.value === null && 'text-muted-foreground italic',
-          )}
-        >
-          {field.value === null
-            ? 'Missing'
-            : (formatValue?.(field.value) ?? field.value)}
-        </p>
+        {isEditing ? (
+          <div className="space-y-2">
+            <Input
+              ref={inputRef}
+              value={draft}
+              disabled={correct.isPending}
+              onChange={(event) => {
+                setDraft(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                // The sheet's own `onEscapeKeyDown` stops the dismissal; this
+                // just performs the cancel.
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  cancel();
+                }
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  save();
+                }
+              }}
+              aria-label={`Correct ${label}`}
+            />
+            {field.raw !== null ? (
+              <p className="font-mono text-xs text-muted-foreground">
+                Scanned as: <span className="break-all">{field.raw}</span>
+              </p>
+            ) : null}
+            <div className="flex gap-2">
+              <Button size="sm" onClick={save} disabled={correct.isPending}>
+                {correct.isPending ? <Spinner /> : null}
+                Confirm
+              </Button>
+              <Button size="sm" variant="ghost" onClick={cancel}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-start justify-between gap-2">
+              <p
+                className={cn(
+                  'text-sm break-words',
+                  field.value === null && 'text-muted-foreground italic',
+                )}
+              >
+                {field.value === null
+                  ? 'Missing'
+                  : (formatValue?.(field.value) ?? field.value)}
+              </p>
+              <Button
+                ref={triggerRef}
+                variant={uncertain ? 'outline' : 'ghost'}
+                size="sm"
+                className="shrink-0"
+                onClick={startEditing}
+              >
+                <PencilIcon aria-hidden />
+                {uncertain ? 'Fix' : 'Edit'}
+                <span className="sr-only"> {label}</span>
+              </Button>
+            </div>
 
-        {field.raw !== null && field.raw !== field.value ? (
-          <p className="font-mono text-xs text-muted-foreground">
-            Scanned as: <span className="break-all">{field.raw}</span>
-          </p>
-        ) : null}
+            {field.raw !== null && field.raw !== field.value ? (
+              <p className="font-mono text-xs text-muted-foreground">
+                Scanned as: <span className="break-all">{field.raw}</span>
+              </p>
+            ) : null}
 
-        {field.status === 'corrected' ? (
-          <p className="text-xs text-confidence-high">Corrected by hand</p>
-        ) : uncertain ? (
-          <p className={cn('text-xs', config.className)}>
-            {field.status === 'missing'
-              ? 'Not found on the page'
-              : `${config.label} confidence — needs checking`}
-          </p>
-        ) : null}
+            {field.status === 'corrected' ? (
+              <p className="text-xs text-confidence-high">Corrected by hand</p>
+            ) : uncertain ? (
+              <p className={cn('text-xs', config.className)}>
+                {field.status === 'missing'
+                  ? 'Not found on the page'
+                  : `${config.label} confidence — needs checking`}
+              </p>
+            ) : null}
+          </>
+        )}
       </dd>
     </div>
   );
@@ -264,7 +534,7 @@ function MetaRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 py-1.5">
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-1.5">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="break-words">{children}</dd>
     </div>
