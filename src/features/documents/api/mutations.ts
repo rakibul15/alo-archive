@@ -3,19 +3,28 @@ import { request } from '@/lib/api/client';
 import {
   documentRecordSchema,
   documentSummarySchema,
+  retryOutcomeSchema,
+  type DocumentFilters,
   type ExtractedFieldKey,
+  type RetryOutcome,
 } from '@/lib/domain/document';
 
-const retryResultSchema = z.object({
-  retried: z.array(z.string()),
-  refused: z.array(z.string()),
-});
-export type RetryResult = z.infer<typeof retryResultSchema>;
-
-export function retryDocuments(ids: readonly string[]): Promise<RetryResult> {
-  return request('/documents/retry', retryResultSchema, {
+/**
+ * Retries either an explicit id list or everything matching the current filter
+ * minus a few exceptions. The second form is what makes "retry all failed"
+ * possible against a 100,000-row archive without a 100,000-entry request body.
+ */
+export function retryDocuments(
+  input:
+    | { kind: 'ids'; ids: string[] }
+    | { kind: 'filter'; filter: DocumentFilters; except: string[] },
+): Promise<RetryOutcome> {
+  return request('/documents/retry', retryOutcomeSchema, {
     method: 'POST',
-    body: { ids },
+    body:
+      input.kind === 'ids'
+        ? { ids: input.ids }
+        : { filter: input.filter, except: input.except },
   });
 }
 

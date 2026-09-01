@@ -4,6 +4,7 @@ import {
   ERROR_CATALOGUE,
   EXTRACTED_FIELD_KEYS,
   REVIEW_THRESHOLD,
+  emptyRetryOutcome,
   overallConfidence,
   type ArchiveSummary,
   type DocumentFilters,
@@ -15,6 +16,7 @@ import {
   type ExtractedFieldKey,
   type ExtractedFields,
   type ProcessingErrorCode,
+  type RetryOutcome,
   type StatusCounts,
 } from '@/lib/domain/document';
 import { DOCUMENT_STATUSES } from '@/lib/domain/document';
@@ -457,19 +459,57 @@ class Archive {
    * silently accepted — a password-protected PDF fails identically every time,
    * and a retry button that does nothing teaches people to distrust it.
    */
-  retry(ids: readonly string[]): { retried: string[]; refused: string[] } {
-    const retried: string[] = [];
-    const refused: string[] = [];
-    const now = Date.now();
+  retry(ids: readonly string[]): RetryOutcome {
+    const rows: IndexRow[] = [];
+    const outcome = emptyRetryOutcome();
 
     for (const id of ids) {
       const row = this.byId.get(id);
-      if (!row || row.status !== 'failed' || !row.errorCode) {
-        refused.push(id);
+      if (!row) {
+        outcome.notFound += 1;
+        continue;
+      }
+      rows.push(row);
+    }
+
+    return this.retryRows(rows, outcome);
+  }
+
+  /**
+   * Bulk retry driven by a filter rather than an id list.
+   *
+   * "Retry every failed document" against a 100,000-row archive must not mean
+   * shipping 100,000 ids to the server. The client sends the query it is
+   * looking at plus the handful of rows the user unticked, and the set is
+   * resolved here where it already lives.
+   */
+  retryMatching(
+    filters: DocumentFilters,
+    except: readonly string[],
+  ): RetryOutcome {
+    const excluded = new Set(except);
+    const rows = this.rows.filter(
+      (row) => !excluded.has(row.id) && this.matches(row, filters),
+    );
+    return this.retryRows(rows, emptyRetryOutcome());
+  }
+
+  private retryRows(
+    rows: readonly IndexRow[],
+    outcome: RetryOutcome,
+  ): RetryOutcome {
+    const now = Date.now();
+
+    for (const row of rows) {
+      if (row.status !== 'failed' || !row.errorCode) {
+        outcome.notFailed += 1;
         continue;
       }
       if (!ERROR_CATALOGUE[row.errorCode].retryable) {
-        refused.push(id);
+        // Counted by reason, so the UI can say *why* rather than just "some
+        // could not be retried".
+        outcome.refusedByCode[row.errorCode] += 1;
+        outcome.refused += 1;
         continue;
       }
       row.status = 'pending';
@@ -477,11 +517,11 @@ class Archive {
       row.processedAtMs = null;
       row.dueAtMs =
         now + intBetween(rngFor(row.index + row.attempts), 150, 900);
-      retried.push(id);
-      this.recordChange(id);
+      outcome.retried += 1;
+      this.recordChange(row.id);
     }
 
-    return { retried, refused };
+    return outcome;
   }
 
   /**

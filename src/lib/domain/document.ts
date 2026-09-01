@@ -146,6 +146,7 @@ export const processingErrorCodeSchema = z.enum([
   'UPSTREAM_UNAVAILABLE',
 ]);
 export type ProcessingErrorCode = z.infer<typeof processingErrorCodeSchema>;
+export const PROCESSING_ERROR_CODES = processingErrorCodeSchema.options;
 
 /**
  * Retryability is a property of the error, not a flag someone remembers to
@@ -192,6 +193,42 @@ export const ERROR_CATALOGUE = {
 export const RETRYABLE_ERROR_CODES = processingErrorCodeSchema.options.filter(
   (code) => ERROR_CATALOGUE[code].retryable,
 );
+
+/**
+ * The result of a bulk retry.
+ *
+ * Counts rather than id lists: a retry across a filtered 100,000-row archive
+ * would otherwise answer with a payload larger than the page that triggered it.
+ * The per-code breakdown is what lets the UI say "96 refused — password
+ * protected" instead of a shrug.
+ */
+export const retryOutcomeSchema = z.object({
+  retried: z.number().int().nonnegative(),
+  refused: z.number().int().nonnegative(),
+  /** Selected but not in a failed state — usually already re-queued elsewhere. */
+  notFailed: z.number().int().nonnegative(),
+  notFound: z.number().int().nonnegative(),
+  refusedByCode: z.record(
+    processingErrorCodeSchema,
+    z.number().int().nonnegative(),
+  ),
+});
+export type RetryOutcome = z.infer<typeof retryOutcomeSchema>;
+
+export function emptyRetryOutcome(): RetryOutcome {
+  // Written out rather than derived from the enum: `Object.fromEntries` would
+  // need a cast, and this way adding an error code is a compile error here
+  // instead of a silently missing counter.
+  const refusedByCode: RetryOutcome['refusedByCode'] = {
+    UNSUPPORTED_FORMAT: 0,
+    CORRUPT_FILE: 0,
+    PASSWORD_PROTECTED: 0,
+    PAGE_LIMIT_EXCEEDED: 0,
+    OCR_TIMEOUT: 0,
+    UPSTREAM_UNAVAILABLE: 0,
+  };
+  return { retried: 0, refused: 0, notFailed: 0, notFound: 0, refusedByCode };
+}
 
 export const processingErrorSchema = z.object({
   code: processingErrorCodeSchema,

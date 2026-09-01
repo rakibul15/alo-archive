@@ -55,8 +55,15 @@ describe('retry', () => {
     expect(nonRetryable.length).toBeGreaterThan(0);
 
     const result = archive.retry(nonRetryable.map((item) => item.id));
-    expect(result.retried).toHaveLength(0);
-    expect(result.refused).toHaveLength(nonRetryable.length);
+    expect(result.retried).toBe(0);
+    expect(result.refused).toBe(nonRetryable.length);
+
+    // Refusals are counted by reason, so the UI can say why rather than shrug.
+    const byCode = Object.values(result.refusedByCode).reduce(
+      (a, b) => a + b,
+      0,
+    );
+    expect(byCode).toBe(nonRetryable.length);
   });
 
   it('re-queues a retryable failure', () => {
@@ -73,7 +80,7 @@ describe('retry', () => {
     if (!retryable) return;
 
     const result = archive.retry([retryable.id]);
-    expect(result.retried).toEqual([retryable.id]);
+    expect(result.retried).toBe(1);
     expect(archive.get(retryable.id)?.status).toBe('pending');
   });
 
@@ -87,7 +94,47 @@ describe('retry', () => {
     expect(first).toBeDefined();
     if (!first) return;
 
-    expect(archive.retry([first.id]).refused).toEqual([first.id]);
+    const result = archive.retry([first.id]);
+    expect(result.retried).toBe(0);
+    expect(result.notFailed).toBe(1);
+  });
+
+  it('counts ids that do not exist rather than throwing', () => {
+    const result = archive.retry(['ALO-999999999']);
+    expect(result.notFound).toBe(1);
+    expect(result.retried).toBe(0);
+  });
+
+  /**
+   * The reason `retryMatching` exists: "retry everything that failed" across a
+   * six-figure archive must not mean shipping six figures of ids to the server.
+   */
+  it('retries by filter without being handed an id list', () => {
+    const failedFilter = documentFiltersSchema.parse({ status: ['failed'] });
+    const before = archive.list(failedFilter, null, 1).matchedCount;
+    expect(before).toBeGreaterThan(0);
+
+    const result = archive.retryMatching(failedFilter, []);
+    expect(result.retried + result.refused).toBe(before);
+
+    // Everything left failed after the sweep must be non-retryable.
+    const after = archive.list(failedFilter, null, 200).items;
+    expect(
+      after.every(
+        (item) => item.errorCode && !ERROR_CATALOGUE[item.errorCode].retryable,
+      ),
+    ).toBe(true);
+  });
+
+  it('honours the exceptions carried alongside the filter', () => {
+    const failedFilter = documentFiltersSchema.parse({ status: ['failed'] });
+    const failed = archive.list(failedFilter, null, 200).items;
+    const skipped = failed[0];
+    expect(skipped).toBeDefined();
+    if (!skipped) return;
+
+    const result = archive.retryMatching(failedFilter, [skipped.id]);
+    expect(result.retried + result.refused).toBe(failed.length - 1);
   });
 });
 
