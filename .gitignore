@@ -32,6 +32,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the documented template, which is the only place the optional
+# configuration knobs are listed.
+!.env.example
+
+# local editor / agent tooling
+.claude/
 
 # vercel
 .vercel

@@ -1,11 +1,23 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
+    "target": "ES2022",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
-    "strict": true,
     "noEmit": true,
+
+    "strict": true,
+    // Indexing a virtualised 100k-row array returns `T | undefined` and we want
+    // the compiler to say so — this is the single highest-value strict flag here.
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    // `exactOptionalPropertyTypes` is deliberately off: it fights react-hook-form
+    // and several Radix prop types, and the cost outweighs the benefit here.
+    // See ASSUMPTIONS.md → "TypeScript".
+
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
