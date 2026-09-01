@@ -249,14 +249,23 @@ export const documentSortSchema = z.enum([
   'status',
 ]);
 export type DocumentSort = z.infer<typeof documentSortSchema>;
+export const DOCUMENT_SORTS = documentSortSchema.options;
+
+export const sortDirectionSchema = z.enum(['asc', 'desc']);
+export type SortDirection = z.infer<typeof sortDirectionSchema>;
+export const SORT_DIRECTIONS = sortDirectionSchema.options;
+
+export const confidenceFilterSchema = z.enum(['any', 'high', 'medium', 'low']);
+export type ConfidenceFilter = z.infer<typeof confidenceFilterSchema>;
+export const CONFIDENCE_FILTERS = confidenceFilterSchema.options;
 
 export const documentFiltersSchema = z.object({
   q: z.string().default(''),
   status: z.array(documentStatusSchema).default([]),
   type: z.array(documentTypeSchema).default([]),
-  confidence: z.enum(['any', 'high', 'medium', 'low']).default('any'),
+  confidence: confidenceFilterSchema.default('any'),
   sort: documentSortSchema.default('uploadedAt'),
-  dir: z.enum(['asc', 'desc']).default('desc'),
+  dir: sortDirectionSchema.default('desc'),
 });
 export type DocumentFilters = z.infer<typeof documentFiltersSchema>;
 

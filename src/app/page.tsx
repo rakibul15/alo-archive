@@ -3,7 +3,7 @@ import { ScaleControl } from '@/features/documents/components/scale-control';
 
 export default function OverviewPage() {
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 space-y-8 px-4 py-8 sm:px-6">
+    <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 overflow-y-auto px-4 py-8 sm:px-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Alo Archive</h1>
         <p className="text-sm text-muted-foreground">

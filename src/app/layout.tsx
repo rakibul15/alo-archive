@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { AppHeader } from '@/components/app-header';
 import { Providers } from './providers';
 import './globals.css';
 
@@ -29,8 +30,16 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-background text-foreground">
-        <Providers>{children}</Providers>
+      {/*
+        `h-full` rather than `min-h-full`: the documents page needs a bounded
+        height so the virtualised list can own its own scroll container instead
+        of scrolling the window.
+      */}
+      <body className="flex h-full flex-col bg-background text-foreground">
+        <Providers>
+          <AppHeader />
+          {children}
+        </Providers>
       </body>
     </html>
   );
