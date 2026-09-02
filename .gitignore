@@ -16,6 +16,10 @@
 pnpm-lock.yaml
 yarn.lock
 
+# CLI Lighthouse writes one of these to the cwd by default whenever
+# --output isn't passed — a local-only audit artefact, not source
+*.report.html
+
 # testing
 /coverage
 
