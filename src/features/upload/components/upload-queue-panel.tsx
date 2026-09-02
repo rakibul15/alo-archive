@@ -98,7 +98,15 @@ export function UploadQueuePanel() {
   return (
     <section
       aria-labelledby="upload-queue-heading"
-      className="flex min-h-0 flex-1 flex-col rounded-xl border border-border"
+      // `min-h-0` alone has no floor: when the rejection banner and the
+      // batch-summary card are both showing above it, this section — the
+      // only sibling with `flex-1` — absorbs all the resulting shrinkage,
+      // down to a sliver too short to show more than a row. `min-h-80`
+      // keeps the "can shrink below content size" behaviour `min-h-0`
+      // exists for, but puts a floor under it: room for the header plus a
+      // handful of rows, on any viewport, regardless of how many banners
+      // are stacked above it.
+      className="flex min-h-80 flex-1 flex-col rounded-xl border border-border"
     >
       <header className="space-y-3 border-b border-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
