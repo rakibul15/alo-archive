@@ -24,6 +24,7 @@ import { BulkActionsBar } from './bulk-actions-bar';
 import { DocumentDetailSheet } from './document-detail-sheet';
 import { DocumentsFilters } from './documents-filters';
 import { DocumentsTable } from './documents-table';
+import { InvalidFilterBanner } from './invalid-filter-banner';
 
 /**
  * Orchestrator. The list query lives here rather than inside the table so the
@@ -61,6 +62,8 @@ export function DocumentsView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <InvalidFilterBanner />
+
       <DocumentsFilters
         filters={filters}
         isFiltered={isFiltered}

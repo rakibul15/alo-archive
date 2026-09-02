@@ -2,6 +2,8 @@ import { env } from '@/env';
 import {
   ACCEPTED_UPLOAD_MIME,
   MAX_UPLOAD_BYTES,
+  MIN_UPLOAD_BYTES,
+  normalizeUploadFileName,
 } from '@/lib/domain/upload-constraints';
 import { archive } from '@/server/archive';
 import { jsonError } from '@/server/http';
@@ -38,6 +40,10 @@ export async function POST(request: Request) {
       `${file.name} is larger than 25 MB. Split it before uploading.`,
     );
   }
+  // An empty (or near-empty) file has no scanned form in it to process.
+  if (file.size < MIN_UPLOAD_BYTES) {
+    return jsonError(422, 'FILE_TOO_SMALL', `${file.name} is empty.`);
+  }
   if (file.type !== '' && !ACCEPTED_UPLOAD_MIME.has(file.type)) {
     return jsonError(
       422,
@@ -68,7 +74,7 @@ export async function POST(request: Request) {
 
   return Response.json(
     archive.enqueue({
-      fileName: file.name,
+      fileName: normalizeUploadFileName(file.name),
       fileSize: file.size,
       mimeType: file.type === '' ? 'application/octet-stream' : file.type,
       batchId: typeof batchId === 'string' && batchId !== '' ? batchId : null,

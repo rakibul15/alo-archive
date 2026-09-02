@@ -87,7 +87,18 @@ export function useDocumentFilters() {
   };
 }
 
-/** The document open in the detail panel. Separate so it survives filtering. */
+/**
+ * The document open in the detail panel. Separate so it survives filtering.
+ *
+ * `history: 'push'` is deliberate and differs from the filters above. Filters
+ * replace on purpose — nobody wants a new history entry per keystroke in the
+ * search box — but opening a document is exactly the kind of state change
+ * Back is supposed to undo, the same way it closes any other modal or sheet.
+ * Left on the library default (`replace`) here, opening document B while
+ * document A was open overwrote A's entry instead of stacking a new one, so
+ * Back skipped past every document viewed in a session and landed on
+ * whatever full page load happened to precede all of them.
+ */
 export function useSelectedDocument() {
-  return useQueryState('doc', parseAsString);
+  return useQueryState('doc', parseAsString.withOptions({ history: 'push' }));
 }

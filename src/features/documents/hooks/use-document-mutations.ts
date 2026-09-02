@@ -1,6 +1,11 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useRef } from 'react';
+import {
+  useMutation,
+  useQueryClient,
+  type UseMutationResult,
+} from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { describeError, isRetryable } from '@/lib/api/errors';
 import {
@@ -65,10 +70,54 @@ function describeOutcome(outcome: RetryOutcome): {
   };
 }
 
+/**
+ * Wraps `mutate` so clicks queued before React re-renders can't fire a
+ * duplicate request.
+ *
+ * `isPending` is state: it only reflects reality after the next render, and a
+ * real double-click (or three) queues every call before any of them sees
+ * `isPending: true`. QA confirmed this concretely — three rapid clicks on
+ * retry, on field-correction confirm, and on bulk retry each fired three
+ * network requests, not one. Nothing was corrupted (the server happens to be
+ * idempotent for these two operations), but that safety net was incidental,
+ * not designed in, and doesn't hold for every mutation forever. This lock is
+ * a plain ref, checked and set synchronously, so it closes the gap regardless
+ * of render timing rather than depending on server-side luck.
+ */
+function useSingleFlight<TVariables, TData, TError>(
+  mutation: Pick<UseMutationResult<TData, TError, TVariables>, 'mutate'>,
+): (
+  variables: TVariables,
+  options?: Parameters<typeof mutation.mutate>[1],
+) => void {
+  const inFlight = useRef(false);
+  return useCallback(
+    // Callers here (field correction) also pass a per-call `onSuccess` to
+    // close their own editing state, so this has to forward that second
+    // argument rather than swallow it — it merges in the lock release
+    // alongside whatever the caller already asked for.
+    (
+      variables: TVariables,
+      options?: Parameters<typeof mutation.mutate>[1],
+    ) => {
+      if (inFlight.current) return;
+      inFlight.current = true;
+      mutation.mutate(variables, {
+        ...options,
+        onSettled: (...args) => {
+          inFlight.current = false;
+          options?.onSettled?.(...args);
+        },
+      });
+    },
+    [mutation],
+  );
+}
+
 export function useRetryDocuments() {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: retryDocuments,
     ...backoff,
     onSuccess: (outcome) => {
@@ -88,12 +137,15 @@ export function useRetryDocuments() {
       toast.error(title, { description: detail });
     },
   });
+
+  const mutate = useSingleFlight(mutation);
+  return { ...mutation, mutate };
 }
 
 export function useCorrectField() {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: correctField,
     ...backoff,
     onSuccess: (record, variables) => {
@@ -119,6 +171,9 @@ export function useCorrectField() {
       toast.error(title, { description: detail });
     },
   });
+
+  const mutate = useSingleFlight(mutation);
+  return { ...mutation, mutate };
 }
 
 export type CorrectFieldInput = {
