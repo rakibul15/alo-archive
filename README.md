@@ -234,7 +234,21 @@ comes back **100 across the board** on `/`, `/documents` and `/upload`.
 ## Assumptions and trade-offs
 
 In [`ASSUMPTIONS.md`](./ASSUMPTIONS.md) — what was assumed, what was
-deliberately left out, and why.
+deliberately left out, and why. Sixteen numbered decisions in total;
+the ones most likely to surprise someone testing the app rather than
+reading the source:
+
+- [Upload is capped at 25 MB / 64 bytes / five file types](./ASSUMPTIONS.md#assumption-13) —
+  enforced, not cosmetic, and not `.env`-configurable like the simulated
+  pipeline is.
+- [Confidence reads as high/medium/low at 90% and 75%, and 75% is also the
+  `needs_review` cutoff](./ASSUMPTIONS.md#assumption-14).
+- ["Over 50 pages" in the failure catalogue is a label on a randomly-simulated
+  error, not an enforced check](./ASSUMPTIONS.md#assumption-15) — unlike the
+  upload cap above, nothing counts your file's actual pages.
+- [Search debounces 300 ms; query results are treated as fresh for
+  30 s](./ASSUMPTIONS.md#assumption-16) — ordinary client defaults, not
+  product decisions.
 
 ## What I would do with more time
 
