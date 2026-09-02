@@ -7,6 +7,27 @@ records that came out uncertain.
 > All nine features in scope are built and covered by tests. `ASSUMPTIONS.md`
 > records what was assumed, what was deliberately left out, and why.
 
+**Overview** — status at a glance, and the one-click path to judging
+performance at the archive's real scale:
+
+![Overview screen, showing the processing pipeline status tiles and the "Load 100,000 documents" scale control](./docs/screenshots/overview.png)
+
+**Documents** — server-side filter/sort/search over a virtualised table;
+this view is filtered to the 331 documents currently flagged for review:
+
+![Documents table filtered to "Needs review", showing per-row status, confidence and upload date](./docs/screenshots/documents.png)
+
+**Review panel** — the page and the extracted fields side by side, linked by
+the bounding box each value was actually read from; the flagged date field
+is one click from being corrected in place:
+
+![Document detail panel with the simulated scan on the left, bounding boxes drawn per field, and the extracted fields list on the right](./docs/screenshots/detail.png)
+
+**Upload** — drag-and-drop or a whole folder, with the accepted types and
+limits stated up front rather than discovered via a rejection:
+
+![Upload screen with an empty dropzone, stating accepted file types, the 25 MB limit and the "select a whole folder" option](./docs/screenshots/upload.png)
+
 ## Running it
 
 ```bash
