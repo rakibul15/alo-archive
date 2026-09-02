@@ -201,10 +201,53 @@ never exercises.
   back to check on it.
 - **A batch ends with a statement**, not a progress bar sitting at 100%: what
   was accepted, what failed, and the two things worth doing next.
-- **The queue cannot survive a reload** — a `File` handle is not serialisable
-  and a "resume" button would be a lie. So there is a beforeunload prompt while
-  work is in flight, and a breadcrumb that turns into a banner telling the
-  operator how many never made it.
+- **The queue cannot survive a reload** — a `File` handle is not serialisable,
+  so there is no button that resumes a batch without the operator doing
+  anything. There is a beforeunload prompt while work is in flight, and a
+  breadcrumb that turns into a banner telling the operator how many never
+  made it. What *has* changed since this was written: re-selecting the same
+  file the banner is talking about no longer re-sends it from scratch — see
+  the next section.
+
+### Uploads are chunked and resumable
+
+The single-shot ingest this app started with had one unavoidable failure
+mode: a connection dropping at 90% of a 25 MB scan meant re-sending all
+25 MB. Upload is now the one part of this prototype that matches the
+production shape described in `ASSUMPTIONS.md` rather than just being
+designed against it: `POST /api/uploads/sessions` opens a session (id +
+resume token, the same two-part shape a presigned S3 multipart upload
+hands back), `PUT .../parts/:n` takes each 4 MB chunk, `POST .../complete`
+finalises it — `CreateMultipartUpload` / `UploadPart` /
+`CompleteMultipartUpload`, mocked at the same seam everything else is (the
+bytes are received and genuinely discarded, same as before).
+
+The session id and resume token persist to `localStorage`, keyed by
+`name:size:lastModified` rather than a content hash — hashing a 25 MB file
+on the main thread to look up a resume token would cost more than
+re-uploading the chunks it saves, and the server's own per-part size check
+is the backstop if two different files ever collided on that key. Re-select
+the same file after an interruption and it picks up from the last part the
+server actually acknowledged; a different file, or the same one after the
+session's one-hour TTL, just opens a fresh session — there's no incorrect
+state reachable, only a missed optimisation.
+
+The existing per-file retry-with-backoff didn't need to change to get resume
+for free: a retry just calls the upload function again, and because that
+function already checks for a resumable session before sending anything, an
+automatic retry after a dropped part resumes it exactly the way a
+reload-and-reselect does.
+
+Verified against the real server, not simulated: a session opened and one
+part uploaded via direct HTTP calls (standing in for "a real interruption
+happened"), then a real browser given a `File` with the same
+name/size/lastModified selected the normal way — it checked for the
+existing session first, sent only the two parts that were still missing,
+and completed successfully. A second run seeded a resume pointer at a
+session id that didn't exist server-side (an expired-session simulation) and
+confirmed the fallback: a 404 on the resume check, then a clean new session
+opened and the file uploaded whole, no different from never having tried to
+resume at all.
 
 ### Bulk actions carry the query, not the ids
 
@@ -342,6 +385,8 @@ reading the source:
 
 - Move file enumeration and hashing off the main thread into a Web Worker.
 - Persist upload intent (not the `File` handles, which cannot be persisted) so
-  a refresh mid-batch can tell you exactly which files to re-select.
-- Resumable uploads — presigned multipart with a resume token.
+  a refresh mid-batch can tell you exactly *which* files to re-select — the
+  interrupted-batch banner still only says how many, not their names, even
+  though re-selecting the right ones now resumes them (see "Uploads are
+  chunked and resumable" below).
 - An accessibility audit with a real screen reader rather than by inspection.

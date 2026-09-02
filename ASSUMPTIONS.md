@@ -75,9 +75,18 @@ knowing what was skipped is different from forgetting it.
    teaches people to distrust every retry button.
 9. **A human correction always wins** over the extracted value, is pinned to
    full confidence, and is marked `corrected` rather than overwriting silently.
-10. **The upload queue is session-scoped.** `File` handles cannot be persisted,
-    so a refresh mid-upload loses the queue. This is surfaced — a warning before
-    unload and a banner afterwards — rather than hidden.
+10. **The queue itself is session-scoped; the upload progress underneath it is
+    not.** `File` handles genuinely cannot be persisted — that's a browser
+    limit, not a choice — so a refresh mid-upload still means re-selecting
+    every file, and that's surfaced honestly (a warning before unload, a
+    banner afterwards) rather than hidden. What changed: uploads are now
+    chunked and resumable (`features/upload/lib/chunked-upload.ts`), with the
+    session id and resume token for each in-flight file persisted to
+    `localStorage`, keyed by name+size+lastModified. Re-selecting the *same*
+    file resumes it from the last part the server actually received instead
+    of re-sending it from byte zero. A different file, or the same file after
+    the one-hour session TTL, just opens a fresh session — there's no
+    incorrect state possible, only a missed optimisation.
 11. **State is in memory and single-instance.** Restarting the server resets
     the archive. It would not survive a multi-instance deployment; that is the
     correct trade for a prototype and the wrong one for production.
@@ -357,3 +366,16 @@ browser, an ingest queue feeding an OCR worker pool, Postgres holding
 websocket or webhook. The frontend contract here was designed against that
 shape — cursor pagination, id-only change events, per-field confidence — so the
 swap does not require reshaping the UI.
+
+Upload is the one piece of that shape actually built, not just designed
+against: `POST /api/uploads/sessions` opens a session and hands back an
+opaque id and resume token, `PUT .../parts/:n` receives each chunk, `POST
+.../complete` finalises it — the same three-step shape S3's own multipart API
+uses, `CreateMultipartUpload` / `UploadPart` / `CompleteMultipartUpload`. What
+stays mocked is *where* the bytes go: today's routes receive and discard them
+same as the old single-shot endpoint did; a real swap points the client at
+presigned S3 URLs instead of same-origin routes and has S3 do the reassembly,
+which is a change to `chunked-upload.ts`'s three fetch calls, not to the
+resumability model itself — the session/part/complete shape, the resume
+token, and the client-side fingerprint-keyed resume registry all carry over
+unchanged.

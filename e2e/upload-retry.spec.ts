@@ -8,6 +8,12 @@ import { expect, test } from '@playwright/test';
  * test drives the flow the way an operator actually meets it: a file fails,
  * automatic retries exhaust, and a manual retry has to recover it.
  *
+ * Targets `PUT .../parts/:n` specifically — session creation, the resume
+ * check, and completion are left alone, so this exercises the same resumable
+ * path a real dropped connection would: each retry (automatic or manual)
+ * re-uses the session already opened rather than starting a new one, exactly
+ * like `README.md` → "Uploads are chunked and resumable" describes.
+ *
  * The failure is forced via network interception rather than the app's own
  * `SIM_FAILURE_RATE` — that's randomised and capped at a 50%-per-attempt
  * ceiling by its own schema, so it can't deterministically fail a specific
@@ -17,11 +23,11 @@ test.describe('upload → failure → retry', () => {
   test('a failed upload can be retried to success', async ({ page }) => {
     let attempts = 0;
 
-    // Fail the first three attempts (matching NEXT_PUBLIC_MAX_UPLOAD_ATTEMPTS'
-    // default) with a retryable 503, exactly the shape the real ingest route
-    // returns for SIM_FAILURE_RATE. Every attempt after that passes through
-    // to the real mock backend and succeeds normally.
-    await page.route('**/api/uploads', async (route) => {
+    // Fail the first three part uploads (matching
+    // NEXT_PUBLIC_MAX_UPLOAD_ATTEMPTS' default) with a retryable 503, exactly
+    // the shape the real route returns for SIM_FAILURE_RATE. Every attempt
+    // after that passes through to the real mock backend and succeeds.
+    await page.route('**/api/uploads/sessions/*/parts/*', async (route) => {
       attempts += 1;
       if (attempts <= 3) {
         await route.fulfill({

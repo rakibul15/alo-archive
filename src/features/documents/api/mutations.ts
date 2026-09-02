@@ -40,7 +40,7 @@ export function correctField(input: {
 
 // Ingest deliberately does not live here. It is the one request that needs
 // upload progress, which `fetch` cannot report, so it uses XMLHttpRequest in
-// `features/upload/lib/upload-file.ts` rather than the shared client.
+// `features/upload/lib/chunked-upload.ts` rather than the shared client.
 
 const scaleResultSchema = z.object({
   size: z.number().int(),

@@ -60,8 +60,9 @@ export function UploadView() {
             <p>
               The page was closed or reloaded while they were still going.
               Browsers do not let a page hold on to files across a reload, so
-              they have to be selected again — nothing already uploaded was
-              lost.
+              they have to be selected again — but re-selecting the same files
+              resumes them from the last part the server actually received,
+              rather than sending them from scratch.
             </p>
             <Button
               size="sm"

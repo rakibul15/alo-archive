@@ -20,7 +20,7 @@ import {
   summarise,
   type QueueState,
 } from './lib/queue';
-import { uploadFile } from './lib/upload-file';
+import { chunkedUpload } from './lib/chunked-upload';
 
 /**
  * In-flight requests, kept out of the store on purpose.
@@ -104,7 +104,7 @@ export const useUploadStore = create<UploadStore>((set, get) => {
       const controller = new AbortController();
       controllers.set(id, controller);
 
-      void uploadFile(item.file, {
+      void chunkedUpload(item.file, {
         signal: controller.signal,
         onProgress: (fraction) => {
           set((state) => ({ queue: markProgress(state.queue, id, fraction) }));

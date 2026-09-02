@@ -5,7 +5,7 @@
  * scheduling — how many uploads run at once, when a failure is worth another
  * attempt, how long to wait before it — and none of that should need a rendered
  * component or a network stack to test. The Zustand store in `../store.ts` is a
- * thin shell around these functions, and `../lib/upload-file.ts` does the I/O.
+ * thin shell around these functions, and `../lib/chunked-upload.ts` does the I/O.
  */
 
 export type UploadItemStatus =
