@@ -9,8 +9,10 @@ import { Button } from '@/components/ui/button';
 import { documentKeys } from '@/features/documents/api/keys';
 import { useInterruptedBatch } from '../hooks/use-interrupted-batch';
 import { useUploadStore } from '../store';
+import { BatchSummaryCard } from './batch-summary-card';
 import { UploadDropzone } from './upload-dropzone';
 import { UploadQueuePanel } from './upload-queue-panel';
+import { UploadRejections } from './upload-rejections';
 
 /** Freshly ingested rows are folded into the archive at most this often. */
 const REFRESH_INTERVAL_MS = 2_000;
@@ -63,6 +65,8 @@ export function UploadView() {
       ) : null}
 
       <UploadDropzone />
+      <UploadRejections />
+      <BatchSummaryCard />
 
       {completedCount > 0 ? (
         <p className="text-sm text-muted-foreground">

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { MoonIcon, SunIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { UploadStatusPill } from '@/features/upload/components/upload-status-pill';
 import { cn } from '@/lib/utils';
 
 const NAV = [
@@ -48,10 +49,13 @@ export function AppHeader() {
           })}
         </nav>
 
+        <div className="ml-auto flex items-center gap-2">
+          <UploadStatusPill />
+        </div>
+
         <Button
           variant="ghost"
           size="icon"
-          className="ml-auto"
           onClick={() => {
             setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
           }}

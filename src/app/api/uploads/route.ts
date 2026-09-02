@@ -1,17 +1,10 @@
 import { env } from '@/env';
+import {
+  ACCEPTED_UPLOAD_MIME,
+  MAX_UPLOAD_BYTES,
+} from '@/lib/domain/upload-constraints';
 import { archive } from '@/server/archive';
 import { jsonError } from '@/server/http';
-
-/** Mirrors the client-side guard, because a client-side guard is not one. */
-const ACCEPTED_MIME = new Set([
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/tiff',
-  'image/heic',
-]);
-
-const MAX_BYTES = 25 * 1024 * 1024;
 
 /**
  * Stands in for the ingest endpoint.
@@ -38,14 +31,14 @@ export async function POST(request: Request) {
 
   // Rejections that a retry cannot fix are 422, so the client parks them as
   // failed instead of backing off and trying again five times.
-  if (file.size > MAX_BYTES) {
+  if (file.size > MAX_UPLOAD_BYTES) {
     return jsonError(
       422,
       'FILE_TOO_LARGE',
       `${file.name} is larger than 25 MB. Split it before uploading.`,
     );
   }
-  if (file.type !== '' && !ACCEPTED_MIME.has(file.type)) {
+  if (file.type !== '' && !ACCEPTED_UPLOAD_MIME.has(file.type)) {
     return jsonError(
       422,
       'UNSUPPORTED_FORMAT',

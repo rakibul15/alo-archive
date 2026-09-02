@@ -156,6 +156,16 @@ cover it directly.
 - **Progress is real** (see `ASSUMPTIONS.md`), weighted by bytes rather than
   file count, and cancelled files leave the denominator so a stopped batch
   reads as finished rather than stuck.
+- **Nothing is refused silently.** Type and size are checked client-side as
+  well as server-side, and whatever the dropzone turns away is reported with a
+  per-reason breakdown and an itemised list. A batch that quietly enqueues 288
+  of 300 looks like success, which is why it is the worst failure mode here.
+- **Progress follows you.** The queue lives in a store, not a component, so
+  uploads continue while you go and watch documents arrive in the archive — and
+  a pill in the header keeps that work visible instead of making you navigate
+  back to check on it.
+- **A batch ends with a statement**, not a progress bar sitting at 100%: what
+  was accepted, what failed, and the two things worth doing next.
 - **The queue cannot survive a reload** — a `File` handle is not serialisable
   and a "resume" button would be a lie. So there is a beforeunload prompt while
   work is in flight, and a breadcrumb that turns into a banner telling the

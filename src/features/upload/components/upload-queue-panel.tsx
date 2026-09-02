@@ -100,8 +100,9 @@ export function UploadQueuePanel() {
       <header className="space-y-3 border-b border-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="upload-queue-heading" className="text-sm font-medium">
+            {/* The outcome is stated by the summary card; this is just the list. */}
             {summary.isFinished
-              ? 'Upload complete'
+              ? `${numberFormat.format(summary.total)} files in this batch`
               : `Uploading ${numberFormat.format(active)} of ${numberFormat.format(summary.total)}`}
           </h2>
 

@@ -135,6 +135,21 @@ default). Over localhost a 2 MB upload completes in single-digit milliseconds,
 which makes progress, pause and cancel impossible to see and therefore
 impossible to judge.
 
+**Refused files are reported, never dropped.** The dropzone validates type and
+size client-side as well as server-side — rejecting a 30 MB scan *after* it has
+finished uploading wastes the operator's time and bandwidth — and anything
+refused is surfaced with a per-reason breakdown and an itemised list. Dropping a
+folder of 300 and quietly enqueuing 288 is the worst kind of failure, because it
+looks like success; nobody notices the twelve missing documents until months
+later. The "select a folder" path runs the same checks, since a plain file input
+bypasses the dropzone's validation entirely and a real field folder is full of
+`thumbs.db` and stray spreadsheets.
+
+The breakdown is tallied as files arrive rather than counted off the retained
+list, which is capped at 50 entries — deriving it from the capped list would
+print "300 files were not added: 48 unsupported", and a summary whose parts do
+not sum to its total is worse than no summary.
+
 Two smaller decisions in the queue:
 
 - **Aggregate progress is weighted by bytes, not file count.** Finishing a 1 MB
