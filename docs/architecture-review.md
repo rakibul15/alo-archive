@@ -7,6 +7,12 @@ reading the source and judging the decisions in it. Every claim below was
 checked against the actual code or a real build, not recalled from memory —
 where that mattered, the evidence is shown.
 
+**Status: findings 1, 2, 3b, 3c and 4 fixed and re-verified; 3a (the
+optional structural refactor) partly done by design.** Each section is kept
+as originally written, with a **Resolution** block added underneath — same
+pattern as `qa-report.md`, for the same reason: the finding is worth keeping
+next to the fix, not edited away.
+
 **Overall:** the architecture is sound and the domain-modelling decisions
 (schema-first types, keyset pagination, id-only SSE, per-field confidence) are
 genuinely good. The findings here are mostly about **coverage gaps around the
@@ -104,6 +110,49 @@ grep -rln "ErrorBoundary" src/
    shared fallback is a legitimate choice, just worth being a deliberate one
    rather than an implicit one.
 
+**Resolution:** 1, 2 and 3 done in full; 4 done partially, deliberately.
+
+- `src/app/global-error.tsx` added. Per the Next.js 16.3.4 docs (checked
+  directly — `node_modules/next/dist/docs/.../file-conventions/error.md` —
+  this project's own `AGENTS.md` warns training data can be stale here) it
+  cannot inherit `globals.css` or Tailwind, so it's plain inline-styled
+  markup with its own `<html>`/`<body>` and a `light-dark()` CSS value for
+  theming (it can't read the `next-themes` class either, since that provider
+  lives inside the tree this file replaces).
+- `DocumentDetailSheet` now has its own `QueryErrorResetBoundary` +
+  `ErrorBoundary`, in `documents-view.tsx`, matching the reasoning already
+  written down for the table. Its fallback deliberately doesn't render
+  another `Sheet` — a throw unmounts `SheetContent` along with everything
+  else, so the fallback can't assume that shell survived.
+- A global `unhandledrejection` listener was added in `providers.tsx`
+  (`useUnhandledRejectionToast`), logging and surfacing a toast. Verified
+  live: `Promise.reject(new Error('smoke-test'))` from the console produced
+  both the console log and the toast.
+- Also found while reading the same docs: `error.tsx`'s `reset` prop is now
+  the secondary option — `retry` (stable since v16.3.0) re-fetches and
+  re-renders instead of only clearing state, so `error.tsx` was switched to
+  it. This wasn't in the original findings; it's a version-specific
+  improvement the doc reading turned up along the way.
+- `not-found.tsx` (item 4, half of it) was added — cheap, and it closes a
+  real gap in the unbranded-404 sense the finding described. Per-route
+  `error.tsx` (the other half of item 4) was left alone: the review itself
+  called the shared fallback "a legitimate choice," and nothing since has
+  argued for route-specific recovery UI, so this stays a deliberate
+  non-change rather than a silent gap.
+- Considered and explicitly **not** adopted: `catchError` from `next/error`,
+  also stabilized in v16.3.0 — a Next-native alternative to
+  `react-error-boundary` with real advantages (won't accidentally catch
+  `notFound()`/`redirect()`, preserves state outside the boundary via a
+  Transition). It doesn't have an obvious way to also reset TanStack
+  Query's own cached error state the way `QueryErrorResetBoundary` does, and
+  composing the two correctly isn't a documented pattern — worth its own
+  dedicated pass rather than bundling an unverified integration into this
+  fix. Noted for later.
+
+Re-verified: `npm run verify` (lint, typecheck, contrast, tests, build) all
+pass; live smoke test in the browser confirmed the 404 page, the document
+list, and the detail sheet all render correctly after the change.
+
 ---
 
 ## 2. A load-bearing misconception: the React Compiler isn't running
@@ -176,6 +225,35 @@ either direction. Harmless at ~30 visible rows; the honest thing is to either
 say so explicitly or turn the compiler on and let it handle it, rather than
 carry comments that describe a safety net that isn't actually there.
 
+**Resolution:** turned on, not just documented — the review's own preferred
+option, "since the payoff is real."
+
+- `babel-plugin-react-compiler` added as a dev dependency; `reactCompiler:
+  true` added to `next.config.ts`.
+- Caught immediately by the build's own warning: in this exact Next version
+  (16.3.4) the key has moved — it's top-level `reactCompiler`, not
+  `experimental.reactCompiler` as the current public docs (and most
+  tutorials) show. `AGENTS.md`'s warning about this version diverging from
+  training data was right again; fixed from the build output, not guessed.
+- Verified the compiler is actually transforming application code, not just
+  present in the bundle — the same way the original finding was verified,
+  so the evidence is comparable: `grep -c useMemoCache
+  .next/static/chunks/*.js` before this fix matched only React's internal
+  hook-dispatcher table (2 occurrences, no app code). After enabling it, the
+  chunk holding `DocumentDetailSheet`'s strings shows six `.c(N)` cache-array
+  allocations — `.c` is the compiler-runtime hook Babel injects at the top
+  of every transformed component — confirming real application components
+  are now compiled, not just the runtime being bundled unused.
+- The `eslint-disable-next-line react-hooks/incompatible-library` comments
+  in `documents-table.tsx` and `upload-queue-panel.tsx` are still there and
+  still correct (the compiler genuinely cannot memoize a `useVirtualizer`
+  consumer safely) — only the surrounding prose changed, from describing a
+  compiler that wasn't running to describing the one exemption in a compiler
+  that now is.
+- Re-verified: `npm run build` succeeds, `npm run verify` passes in full,
+  and the documents/upload screens were smoke-tested in the browser after
+  the change with no behavioural difference observed.
+
 ---
 
 ## 3. Two files doing more than one job
@@ -223,6 +301,34 @@ five near-identical lines each. Small enough that it's a nitpick, not a
 finding on its own, but worth folding into the `FieldRow` split above if that
 happens.
 
+**Resolution:** 3b and 3c done in full; 3a done for `document-detail-sheet.tsx`
+only, `documents-table.tsx` left as-is — deliberately, not as an oversight.
+
+- `FieldRow` (and the `ScannedAs` hint it now shares between the editing and
+  display branches) moved to its own file,
+  `src/features/documents/components/field-row.tsx`, matching how
+  `document-preview.tsx` was already split out. `document-detail-sheet.tsx`
+  shrank from 622 to 426 lines.
+- `useCorrectField()` is now called once in `DetailContent` and passed down
+  as a `correct` prop, matching how `useRetryDocuments()` was already
+  handled — six mutation instances (one per field) down to one. Safe for the
+  reason the review itself gave: only one field is ever `isEditing` at a
+  time, so only one row's controls ever read the shared `isPending`.
+  Re-verified live: opened a `needs_review` document, fixed the flagged
+  field, confirmed the save — the toast fired, the field cleared, and the
+  document dropped out of the `needs_review` filter (row count went from
+  331 to 330), same as before the hoist.
+- The "Scanned as" duplication is gone — both call sites now render the same
+  `<ScannedAs raw={field.raw} />`, with the original, deliberately different
+  conditions preserved at each site (editing always shows it when raw
+  exists; display only shows it when raw differs from the current value).
+- `documents-table.tsx`'s equivalent split (virtualizer wiring / keyboard
+  nav / header / `DocumentRow` / `RowOutcome` / `TableSkeleton`) was **not**
+  done. The review rated this "same low urgency" as the sheet's split, not
+  a correctness issue, and splitting a 592-line file that's already legible
+  and single-purpose-per-section is a judgement call rather than a fix —
+  left for a future pass rather than bundled in here under time pressure.
+
 ---
 
 ## 4. Testing gaps that break the project's own pattern
@@ -263,6 +369,31 @@ being test-shaped — but they're the ones where the project's own standard
 was quietly not applied, which is worth more than a randomly-selected gap
 would be.
 
+**Resolution:** all three done.
+
+- `describeOutcome()` moved out of `use-document-mutations.ts` into
+  `src/features/documents/lib/describe-outcome.ts`, following the project's
+  own pattern (pure logic in `lib/`, framework code imports it). 7 new
+  tests cover all four branches named in the finding — nothing retried,
+  some refused, some not-failed, singular vs. plural — plus the
+  reasons-joined-together case and a fully empty outcome.
+- `src/lib/api/client.ts` — `request()` and `toQueryString()` — had no test
+  file at all before this; now has 12 tests: every `toQueryString` edge case
+  the finding named (empty entries, `null`/`undefined`/`''`, array-to-comma,
+  an empty array producing no key at all) plus `request()`'s four `ApiError`
+  kinds (`network`, `aborted`, `http` with and without a parseable body,
+  `parse`) using a stubbed `fetch`.
+- `src/server/http.ts` — `parseFilters()` and `parsePagination()` — now has
+  11 tests pinning down exactly the contract the finding described: valid
+  single and comma-separated values parse; an unknown value anywhere in a
+  comma-separated list voids the *entire* filter set back to
+  `DEFAULT_FILTERS` rather than silently keeping the half that parsed
+  (matching `invalid-filter-params.ts`'s own contract, which now has a test
+  cross-referencing why); an out-of-range or non-numeric `limit` falls back
+  to the default rather than throwing.
+- Full suite: 111 tests across 14 files, all passing (`npm run test`), and
+  `npm run verify` (lint, typecheck, contrast, tests, build) is green.
+
 ---
 
 ## 5. What's genuinely good, for balance
@@ -300,20 +431,42 @@ wrong:
 
 ## Summary table
 
-| # | Finding | Severity | Effort to fix |
-|---|---|---|---|
-| 1a | No `global-error.tsx` | Medium | Trivial |
-| 1b | `DocumentDetailSheet` has no error boundary | Medium | Small |
-| 1c | No global `unhandledrejection` handler | Low | Small |
-| 1d | No `not-found.tsx` / per-route `error.tsx` | Low | Small, optional |
-| 2 | React Compiler comments describe a compiler that isn't enabled | Medium | Small (fix comments) or Medium (actually enable it) |
-| 3a | `document-detail-sheet.tsx` / `documents-table.tsx` do several jobs each | Low | Medium (optional refactor) |
-| 3b | `useCorrectField()` instantiated 6× instead of hoisted once | Low | Small |
-| 3c | "Scanned as" markup duplicated in `FieldRow` | Trivial | Trivial |
-| 4 | `describeOutcome`, `client.ts`, `server/http.ts` untested despite being pure logic | Low–Medium | Small per item |
+| # | Finding | Severity | Effort to fix | Status |
+|---|---|---|---|---|
+| 1a | No `global-error.tsx` | Medium | Trivial | Fixed |
+| 1b | `DocumentDetailSheet` has no error boundary | Medium | Small | Fixed |
+| 1c | No global `unhandledrejection` handler | Low | Small | Fixed |
+| 1d | No `not-found.tsx` / per-route `error.tsx` | Low | Small, optional | `not-found.tsx` added; per-route `error.tsx` left as a deliberate non-change |
+| 2 | React Compiler comments describe a compiler that isn't enabled | Medium | Small (fix comments) or Medium (actually enable it) | Fixed — compiler enabled, not just documented |
+| 3a | `document-detail-sheet.tsx` / `documents-table.tsx` do several jobs each | Low | Medium (optional refactor) | `document-detail-sheet.tsx` split; `documents-table.tsx` left, deliberately |
+| 3b | `useCorrectField()` instantiated 6× instead of hoisted once | Low | Small | Fixed |
+| 3c | "Scanned as" markup duplicated in `FieldRow` | Trivial | Trivial | Fixed |
+| 4 | `describeOutcome`, `client.ts`, `server/http.ts` untested despite being pure logic | Low–Medium | Small per item | Fixed — 30 new tests across the three files |
 
 Nothing above is a correctness bug in the sense the QA pass was hunting for
 — everything the app does, it does correctly. This is a different kind of
 review: where the next real bug is *likely to come from* if the codebase
 keeps growing at its current pace, and where the code's own stated reasoning
 doesn't quite match what's actually running.
+
+## What changed, for a diff-free summary
+
+- `src/app/global-error.tsx`, `src/app/not-found.tsx` — new.
+- `src/app/error.tsx` — `reset` → `retry`.
+- `src/app/providers.tsx` — global `unhandledrejection` → toast + log.
+- `src/features/documents/components/documents-view.tsx` — `DocumentDetailSheet`
+  wrapped in its own `QueryErrorResetBoundary` + `ErrorBoundary`.
+- `next.config.ts` — `reactCompiler: true`; `babel-plugin-react-compiler` added
+  to `package.json`.
+- `src/features/documents/components/documents-table.tsx`,
+  `src/features/upload/components/upload-queue-panel.tsx` — comments
+  corrected to describe the compiler actually running.
+- `src/features/documents/components/field-row.tsx` — new (extracted from
+  `document-detail-sheet.tsx`, which shrank from 622 to 426 lines).
+- `src/features/documents/components/document-detail-sheet.tsx` —
+  `useCorrectField()` hoisted to `DetailContent`, passed down as a prop.
+- `src/features/documents/lib/describe-outcome.ts` (+ `.test.ts`) — new,
+  extracted from `use-document-mutations.ts`.
+- `src/lib/api/client.test.ts`, `src/server/http.test.ts` — new.
+- Test suite: 111 tests across 14 files (30 of those tests, across the 3 new
+  files, added in this pass).

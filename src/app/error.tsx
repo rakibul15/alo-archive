@@ -18,10 +18,10 @@ import {
  */
 export default function RouteError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error('[route error]', error);
@@ -37,7 +37,15 @@ export default function RouteError({
             {error.digest ? ` Reference: ${error.digest}` : ''}
           </EmptyDescription>
         </EmptyHeader>
-        <Button onClick={reset}>Try again</Button>
+        {/*
+          `retry()` (stable since Next 16.3.0) re-fetches and re-renders the
+          boundary's children in a transition rather than just clearing local
+          error state, so it can actually recover from a transient failure
+          instead of immediately re-throwing the same one. `reset` is still
+          supported but is now the fallback for callers that specifically want
+          state cleared without a re-fetch — not what we want here.
+        */}
+        <Button onClick={retry}>Try again</Button>
       </Empty>
     </main>
   );

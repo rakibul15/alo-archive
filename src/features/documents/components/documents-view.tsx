@@ -128,16 +128,53 @@ export function DocumentsView() {
         )}
       </QueryErrorResetBoundary>
 
-      <DocumentDetailSheet
-        documentId={selectedId}
-        orderedIds={items.map((item) => item.id)}
-        onNavigate={(id) => {
-          void setSelectedId(id);
-        }}
-        onClose={() => {
-          void setSelectedId(null);
-        }}
-      />
+      {/*
+        Same reasoning and the same pattern as the table's boundary above:
+        the detail sheet is the most complex client component in the app
+        (inline editing, focus management, an SVG preview doing bounding-box
+        math off server data), and it renders as a *sibling* of the table's
+        boundary, not a descendant — so without one of its own, a throw here
+        would propagate straight past the table and take the whole route
+        down with it.
+      */}
+      <QueryErrorResetBoundary>
+        {({ reset: resetQueries }) => (
+          <ErrorBoundary
+            onReset={resetQueries}
+            // A throw here unmounts `Sheet`/`SheetContent` along with the rest
+            // of the subtree, so the fallback can't assume that shell is still
+            // there to render into — a plain, self-contained panel rather than
+            // another `Sheet` keeps this from depending on the very component
+            // tree that just failed.
+            fallbackRender={({ resetErrorBoundary }) => (
+              <div className="fixed inset-y-0 right-0 z-50 flex w-full items-center justify-center border-l border-border bg-background p-6 sm:max-w-md">
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>This document stopped working</EmptyTitle>
+                    <EmptyDescription>
+                      This is a bug rather than a failed document.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                  <Button variant="outline" onClick={resetErrorBoundary}>
+                    Reload
+                  </Button>
+                </Empty>
+              </div>
+            )}
+          >
+            <DocumentDetailSheet
+              documentId={selectedId}
+              orderedIds={items.map((item) => item.id)}
+              onNavigate={(id) => {
+                void setSelectedId(id);
+              }}
+              onClose={() => {
+                void setSelectedId(null);
+              }}
+            />
+          </ErrorBoundary>
+        )}
+      </QueryErrorResetBoundary>
     </div>
   );
 }

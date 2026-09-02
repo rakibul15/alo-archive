@@ -105,11 +105,13 @@ export function DocumentsTable({
 
   const rowHeight = isCompact ? CARD_HEIGHT : ROW_HEIGHT;
 
-  // React Compiler cannot memoize a component that consumes `useVirtualizer` —
-  // the hook hands back fresh function identities every render by design, and
-  // memorizing them would serve stale measurements. The compiler therefore skips
-  // this component, which is the correct outcome rather than a problem to fix:
-  // the component is already cheap because only ~30 rows exist in the DOM.
+  // The compiler is enabled (`next.config.ts`) and memoizes every other
+  // component in this file, but it cannot safely memoize one that consumes
+  // `useVirtualizer` — the hook hands back fresh function identities every
+  // render by design, and memoizing them would serve stale measurements. The
+  // lint rule below is what actually enforces the compiler skips this
+  // component; that's the correct outcome here rather than a problem to fix,
+  // since the component is already cheap with only ~30 rows in the DOM.
   // eslint-disable-next-line react-hooks/incompatible-library -- see above
   const virtualizer = useVirtualizer({
     // The extra row is the "loading more" sentinel at the bottom.

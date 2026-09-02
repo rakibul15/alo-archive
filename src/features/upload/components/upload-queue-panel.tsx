@@ -80,6 +80,9 @@ export function UploadQueuePanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const summary = summarise(queue);
 
+  // The compiler is enabled and memoizes the rest of this file; this one
+  // component is exempt for the same reason as `DocumentsTable` — see the
+  // comment there for the full explanation.
   // eslint-disable-next-line react-hooks/incompatible-library -- see documents-table.tsx
   const virtualizer = useVirtualizer({
     count: queue.order.length,
