@@ -160,6 +160,12 @@ cover it directly.
   well as server-side, and whatever the dropzone turns away is reported with a
   per-reason breakdown and an itemised list. A batch that quietly enqueues 288
   of 300 looks like success, which is why it is the worst failure mode here.
+  The folder picker is a plain file input, so react-dropzone's validation never
+  runs on it — it does its own, or "select a whole folder" would be a way to
+  smuggle a field team's `thumbs.db` and spreadsheets straight past the checks.
+  The itemised list is capped at fifty names; the per-reason counts are tallied
+  as files arrive rather than counted off that list, because a breakdown whose
+  parts do not sum to its own headline is worse than no breakdown.
 - **Progress follows you.** The queue lives in a store, not a component, so
   uploads continue while you go and watch documents arrive in the archive — and
   a pill in the header keeps that work visible instead of making you navigate

@@ -50,8 +50,9 @@ export function UploadRejections() {
     <Alert>
       <TriangleAlertIcon aria-hidden />
       <AlertTitle>
-        {numberFormat.format(rejectedCount)} file
-        {rejectedCount === 1 ? '' : 's'} were not added
+        {rejectedCount === 1
+          ? '1 file was not added'
+          : `${numberFormat.format(rejectedCount)} files were not added`}
       </AlertTitle>
       <AlertDescription>
         <p>{breakdown.join(', ')}. Nothing else in the batch was affected.</p>
