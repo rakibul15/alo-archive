@@ -24,14 +24,28 @@ import {
   type DocumentSummary,
 } from '@/lib/domain/document';
 import { DOCUMENT_TYPE_LABELS } from '@/lib/domain/status-config';
+import {
+  RESIZABLE_COLUMNS,
+  toGridTemplateColumns,
+  type ColumnWidths,
+  type ResizableColumn,
+} from '../lib/column-widths';
+import { useColumnWidths } from '../hooks/use-column-widths';
 import { useIsCompact } from '../hooks/use-media-query';
 import type { useSelection } from '../hooks/use-selection';
+import { ColumnResizeHandle } from './column-resize-handle';
 import { ConfidenceIndicator } from './confidence-indicator';
 import { StatusBadge } from './status-badge';
 
-/** Shared by the header and every row so the columns cannot drift apart. */
-const COLUMN_TEMPLATE =
-  'grid grid-cols-[2.25rem_minmax(0,2.1fr)_minmax(0,1.5fr)_9rem_9.5rem_8rem] items-center gap-4 px-4';
+/**
+ * Shared by the header and every row so the columns cannot drift apart.
+ * `grid-template-columns` itself is no longer part of this — four of the
+ * five columns are user-resizable now, so it has to be computed per-render
+ * from `useColumnWidths()` rather than living in one static Tailwind class.
+ */
+const ROW_LAYOUT_CLASSES = 'grid items-center gap-4 px-4';
+
+const RESIZABLE_COLUMN_SET: ReadonlySet<string> = new Set(RESIZABLE_COLUMNS);
 
 const ROW_HEIGHT = 56;
 const CARD_HEIGHT = 124;
@@ -92,6 +106,7 @@ export function DocumentsTable({
   const isCompact = useIsCompact();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const { widths, resize, resetColumn } = useColumnWidths();
 
   const {
     error,
@@ -276,9 +291,10 @@ export function DocumentsTable({
         <div
           role="presentation"
           className={cn(
-            COLUMN_TEMPLATE,
+            ROW_LAYOUT_CLASSES,
             'h-10 shrink-0 border-y border-border bg-muted/40 text-xs font-medium text-muted-foreground',
           )}
+          style={{ gridTemplateColumns: toGridTemplateColumns(widths) }}
         >
           <Checkbox
             checked={
@@ -291,29 +307,51 @@ export function DocumentsTable({
           />
           {COLUMNS.map((column) => {
             const sortKey = column.sort;
-            if (sortKey === null) {
-              return <span key={column.id}>{column.label}</span>;
+            const isResizable = RESIZABLE_COLUMN_SET.has(column.id);
+            const content =
+              sortKey === null ? (
+                <span>{column.label}</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleSort(sortKey);
+                  }}
+                  className="flex items-center gap-1 rounded-sm text-left hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  aria-label={`Sort by ${column.label}`}
+                >
+                  {column.label}
+                  {filters.sort === sortKey ? (
+                    filters.dir === 'asc' ? (
+                      <ArrowUpIcon aria-hidden className="size-3" />
+                    ) : (
+                      <ArrowDownIcon aria-hidden className="size-3" />
+                    )
+                  ) : (
+                    <span aria-hidden className="size-3" />
+                  )}
+                </button>
+              );
+
+            if (!isResizable) {
+              return <React.Fragment key={column.id}>{content}</React.Fragment>;
             }
-            const active = filters.sort === sortKey;
-            const SortIcon =
-              filters.dir === 'asc' ? ArrowUpIcon : ArrowDownIcon;
+
             return (
-              <button
+              <div
                 key={column.id}
-                type="button"
-                onClick={() => {
-                  toggleSort(sortKey);
-                }}
-                className="flex items-center gap-1 rounded-sm text-left hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                aria-label={`Sort by ${column.label}`}
+                className="relative flex h-full items-center"
               >
-                {column.label}
-                {active ? (
-                  <SortIcon aria-hidden className="size-3" />
-                ) : (
-                  <span aria-hidden className="size-3" />
-                )}
-              </button>
+                {content}
+                <ColumnResizeHandle
+                  column={column.id as ResizableColumn}
+                  label={column.label}
+                  onResize={resize}
+                  onReset={() => {
+                    resetColumn(column.id as ResizableColumn);
+                  }}
+                />
+              </div>
             );
           })}
         </div>
@@ -361,6 +399,7 @@ export function DocumentsTable({
                 item={item}
                 rowIndex={virtualRow.index}
                 isCompact={isCompact}
+                widths={widths}
                 isActive={virtualRow.index === activeIndex}
                 isOpen={item.id === selectedId}
                 isChecked={selection.isRowSelected(item.id)}
@@ -434,6 +473,7 @@ function DocumentRow({
   item,
   rowIndex,
   isCompact,
+  widths,
   isActive,
   isOpen,
   isChecked,
@@ -445,6 +485,7 @@ function DocumentRow({
   item: DocumentSummary;
   rowIndex: number;
   isCompact: boolean;
+  widths: ColumnWidths;
   isActive: boolean;
   isOpen: boolean;
   isChecked: boolean;
@@ -539,7 +580,15 @@ function DocumentRow({
   }
 
   return (
-    <div {...common} className={cn(shared, COLUMN_TEMPLATE)}>
+    <div
+      {...common}
+      className={cn(shared, ROW_LAYOUT_CLASSES)}
+      style={{
+        height,
+        transform: `translateY(${offset}px)`,
+        gridTemplateColumns: toGridTemplateColumns(widths),
+      }}
+    >
       {checkbox}
       <span role="gridcell" className="min-w-0">
         <span className="block truncate font-medium">{item.fileName}</span>
@@ -564,6 +613,12 @@ function DocumentRow({
 }
 
 function TableSkeleton({ isCompact }: { isCompact: boolean }) {
+  // The real header/rows aren't mounted yet to read a width from, but the
+  // stored preference is — reading it here means the skeleton's columns
+  // land in roughly the same place the real ones are about to, instead of
+  // flashing from default widths to a resized layout once data arrives.
+  const { widths } = useColumnWidths();
+
   return (
     <div className="min-h-0 flex-1 space-y-px" aria-busy>
       <span className="sr-only">Loading documents</span>
@@ -572,9 +627,14 @@ function TableSkeleton({ isCompact }: { isCompact: boolean }) {
           key={index}
           className={cn(
             'border-b border-border',
-            isCompact ? 'space-y-2 px-4 py-3' : COLUMN_TEMPLATE,
+            isCompact ? 'space-y-2 px-4 py-3' : ROW_LAYOUT_CLASSES,
           )}
-          style={{ height: isCompact ? CARD_HEIGHT : ROW_HEIGHT }}
+          style={{
+            height: isCompact ? CARD_HEIGHT : ROW_HEIGHT,
+            gridTemplateColumns: isCompact
+              ? undefined
+              : toGridTemplateColumns(widths),
+          }}
         >
           {!isCompact && <Skeleton className="size-4" />}
           <Skeleton className="h-4 w-full max-w-[16rem]" />

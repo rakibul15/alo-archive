@@ -214,6 +214,32 @@ exceptions — **113 bytes**, the same at 182 rows or 100,000 — and the server
 resolves the set where it already lives. The reply is counts broken down by
 error code, so the toast can say *why* 117 documents were refused.
 
+### Column widths are a preference, not a layout accident
+
+Four of the five columns are drag-resizable (`Document` stays flexible —
+`minmax(0, 1fr)` — and absorbs whatever the other four don't use, which is
+what keeps the table from ever needing a horizontal scrollbar). Dragging
+reports *incremental* deltas rather than an absolute width, so the component
+doing the dragging never has to know or track the column's current size —
+`useColumnWidths` owns that single source of truth, persisted to
+`localStorage` the same way saved views are. `ArrowLeft`/`ArrowRight` on a
+focused handle step it by a fixed amount for anyone who can't drag; `Escape`
+mid-drag sends back the exact negative of everything applied so far, the
+same "abandon, don't commit" convention the field-correction inputs already
+use; a double-click resets just that one column, not the whole table.
+
+Verified with a real mouse, not just a click simulator: the environment this
+was built in hit a harness fault mid-session where the usual browser-pane
+tool stopped delivering any input to the page at all — confirmed
+independently of this feature, since even a plain nav-link click silently
+failed. Two things filled the gap rather than skipping verification: a
+`ColumnResizeHandle` component test (`fireEvent.pointerDown/Move/Up`,
+`keyDown`) that doesn't depend on real screen coordinates at all, and a raw
+CDP script driving genuine `Input.dispatchMouseEvent` calls against a
+headless Chrome instance outside the broken tool — both confirmed the same
+result a live drag would: `status: 144 → 194` after a 50px pull, `localStorage`
+and the rendered `grid-template-columns` agreeing.
+
 ### Saved views are a name for a URL
 
 Filters already live in the URL, so "save a view" doesn't need a database
@@ -318,5 +344,4 @@ reading the source:
 - Persist upload intent (not the `File` handles, which cannot be persisted) so
   a refresh mid-batch can tell you exactly which files to re-select.
 - Resumable uploads — presigned multipart with a resume token.
-- Real virtualised column resizing for the documents table.
 - An accessibility audit with a real screen reader rather than by inspection.
