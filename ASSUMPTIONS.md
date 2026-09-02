@@ -94,6 +94,31 @@ knowing what was skipped is different from forgetting it.
     client check is not a check). Unlike the simulated-pipeline numbers in
     assumption 2, these are **not** exposed through `.env.example` — they are
     a fixed product decision, not a tuning knob for demoing the pipeline.
+14. **Confidence bands are 90% / 75%, and 75% doubles as the review
+    threshold.** `confidenceBand()` reads ≥90% as "high", 75–89% as "medium",
+    below that as "low"; the same 75% line (`REVIEW_THRESHOLD`) decides
+    whether a document is routed to `needs_review`. No brief mandate behind
+    either number — they stand in for "obviously fine" versus "worth a second
+    look," set so the review queue catches genuinely marginal extractions
+    without flooding the operator with anything short of a near-perfect read.
+    Reusing one number for both the band boundary and the routing threshold is
+    deliberate: a field reading "medium" confidence is, by construction,
+    exactly the case the review queue exists for.
+15. **"Documents over 50 pages must be split before upload" is flavour text,
+    not an enforced limit.** `PAGE_LIMIT_EXCEEDED` is one of six error codes
+    the simulation assigns at random to model realistic failure variety (see
+    assumption 2) — nothing here counts an uploaded file's actual pages and
+    rejects it above 50; the fixture generator itself caps simulated PDFs at
+    1–12 pages, well under the number in the message. Worth being explicit
+    about, since it reads like a real, client-enforced constraint the way
+    assumption 13's 25 MB limit actually is, and it is not one.
+16. **Two minor client defaults, neither tuned against a measurement the way
+    the upload concurrency cap in the README was:** the search box debounces
+    input 300 ms before it reaches the URL/query (`documents-filters.tsx`),
+    and TanStack Query treats a response as fresh for 30 s (`providers.tsx`)
+    before refetching on its own. Ordinary perf defaults, picked once rather
+    than product decisions, listed here only so nothing in the app is a
+    number nobody can account for.
 
 ## Design tokens
 
