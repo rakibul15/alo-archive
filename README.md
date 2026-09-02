@@ -214,6 +214,19 @@ exceptions — **113 bytes**, the same at 182 rows or 100,000 — and the server
 resolves the set where it already lives. The reply is counts broken down by
 error code, so the toast can say *why* 117 documents were refused.
 
+### Saved views are a name for a URL
+
+Filters already live in the URL, so "save a view" doesn't need a database
+record — it's a name next to a `DocumentFilters` object, and applying it is
+the same `setFilters` call a filter click makes. What it needed instead was a
+place to live: `localStorage`, not a server, since there's no account for a
+server-side one to belong to (see ASSUMPTIONS.md → "One operator, no roles").
+Read via `useSyncExternalStore` against a module-level snapshot rather than
+mirrored into component state through `useState` + an effect — the same
+pattern `useInterruptedBatch` already uses for the same reason: `localStorage`
+*is* the source of truth, and copying it into React state is just a second
+place for the two to disagree.
+
 ### The review loop
 
 The panel is a split screen: a page on one side, the extracted fields on the
@@ -305,5 +318,5 @@ reading the source:
 - Persist upload intent (not the `File` handles, which cannot be persisted) so
   a refresh mid-batch can tell you exactly which files to re-select.
 - Resumable uploads — presigned multipart with a resume token.
-- Real virtualised column resizing and a saved-view system for filters.
+- Real virtualised column resizing for the documents table.
 - An accessibility audit with a real screen reader rather than by inspection.

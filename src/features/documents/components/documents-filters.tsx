@@ -29,6 +29,7 @@ import {
   DOCUMENT_TYPE_LABELS,
   STATUS_CONFIG,
 } from '@/lib/domain/status-config';
+import { SavedViewsMenu } from './saved-views-menu';
 import { StatusBadge } from './status-badge';
 import type { useDocumentFilters } from '../hooks/use-document-filters';
 
@@ -184,6 +185,14 @@ export function DocumentsFilters({
           ))}
         </SelectContent>
       </Select>
+
+      <SavedViewsMenu
+        filters={filters}
+        isFiltered={isFiltered}
+        onApply={(saved) => {
+          void setFilters(saved);
+        }}
+      />
 
       {isFiltered ? (
         <Button variant="ghost" size="sm" onClick={reset}>
