@@ -22,7 +22,19 @@ export function StatusSummary() {
         <h2 id="pipeline-heading" className="text-lg font-semibold">
           Processing pipeline
         </h2>
-        <p className="text-sm text-muted-foreground" aria-live="polite">
+        {/*
+          `truncate` is load-bearing here, not decorative. This line grows a
+          live "· 12.3/s completing" suffix whenever the SSE stream reports
+          throughput, which on a narrow viewport is enough extra text to wrap
+          onto a second line — Lighthouse measured exactly that: a mid-session
+          reflow that pushes the whole status grid down, worth 0.26 of CLS on
+          its own. Pinning the line means the summary can never change height,
+          no matter how long the string gets while the page is live.
+        */}
+        <p
+          className="max-w-full truncate text-sm text-muted-foreground"
+          aria-live="polite"
+        >
           {data
             ? `${numberFormat.format(data.totalCount)} documents in the archive` +
               (data.throughput > 0
@@ -43,13 +55,21 @@ export function StatusSummary() {
                 Each tile links into the filtered list rather than being a
                 decorative counter — seeing "174 failed" and not being able to
                 click through to those 174 is the most obvious thing to want.
+
+                A zero-count tile used to be dimmed with `opacity-60` to read
+                as de-emphasised. CSS `opacity` cuts the contrast of
+                everything inside a subtree, text included, against whatever
+                sits behind it — Lighthouse's real accessibility audit (which
+                walks ancestor opacity the way `scripts/check-contrast.mjs`
+                cannot, since that script only ever checks a token against a
+                flat background) measured this specific case at 3.52:1 against
+                a 4.5:1 requirement. The number "0" already reads as
+                de-emphasised on its own; it does not need a second,
+                contrast-breaking signal on top of it.
               */}
               <Link
                 href={`/documents?status=${status}`}
-                className={cn(
-                  'block rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                  count === 0 && 'opacity-60',
-                )}
+                className="block rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
                 <Card className={cn('gap-2 border p-4', config.className)}>
                   <div className="flex items-center gap-2 text-sm font-medium">

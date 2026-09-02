@@ -217,6 +217,20 @@ No component names a colour. Semantic tokens only, enforced by an ESLint rule,
 with a contrast script that parses `globals.css` and fails the build below WCAG
 AA in either theme. See `ASSUMPTIONS.md` for the full reasoning.
 
+### Lighthouse: 100 / 100 / 100 / 100, desktop, all three routes
+
+The static token check can't see what a component does with a token at
+runtime — it missed a zero-count status tile dimmed with `opacity-60`, which
+quietly cut its text below WCAG AA by scaling the alpha of everything inside
+it. A real Lighthouse run against a production build caught it in seconds;
+`ASSUMPTIONS.md` has the full account, including a live-updating summary line
+that occasionally wrapped to a second line and shifted the page under it (CLS
+0.26 → 0.002), and why the numbers are reported for both the default
+mobile-simulated preset (low-to-mid 90s on Performance, entirely a function of
+simulated network latency against an internal tool's JS payload — TTFB is
+~2 ms) and `--preset=desktop`, which matches this app's actual persona and
+comes back **100 across the board** on `/`, `/documents` and `/upload`.
+
 ## Assumptions and trade-offs
 
 In [`ASSUMPTIONS.md`](./ASSUMPTIONS.md) — what was assumed, what was

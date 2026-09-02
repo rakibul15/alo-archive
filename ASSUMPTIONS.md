@@ -107,6 +107,63 @@ not merely intended:
 Status is never communicated by colour alone — every status carries an icon and
 a text label (WCAG 1.4.1).
 
+## What the token check cannot see, and what caught it instead
+
+`check-contrast.mjs` verifies every domain token against a flat theme
+background and gates the build on it. It cannot see what happens once a
+component wraps that token in something else — and one did. A zero-count
+status tile (e.g. "Uploading — 0") was dimmed with `opacity-60` to read as
+de-emphasised. CSS `opacity` scales down the alpha of everything in the
+subtree, text included, against whatever sits behind it — so a token that
+passes 8.9:1 in isolation can still render unreadable once a parent opacity is
+applied on top. The script has no way to model that, because it never renders
+anything; it only resolves CSS variables.
+
+A real Lighthouse accessibility audit (`npx lighthouse … --preset=desktop`,
+run against a production build) caught it in ten seconds, walking actual
+ancestor opacity the way a browser does: **3.52:1 against a 4.5:1
+requirement**, on `#496e9d` text over a `#101419` composited background. Fixed
+by removing the opacity — the number "0" already reads as de-emphasised on its
+own, so it did not need a second, contrast-breaking signal stacked on top of
+it. Re-audited clean afterwards, three runs, no variance.
+
+The same audit pass found a genuine layout shift (CLS 0.26 on the overview
+page): the pipeline summary line ("2,400 documents in the archive · 12.3/s
+completing") grows a live throughput suffix as the SSE stream reports it, and
+on a narrow viewport that was sometimes enough extra text to wrap onto a
+second line mid-session, pushing the whole status grid down half a line.
+Fixed with `truncate` on that one element — a live-updating string can never
+be allowed to change the height of its container. CLS afterwards: 0.002,
+attributable to that same element's benign horizontal growth from empty to
+full text, not a vertical shift at all.
+
+Two things this pass also ruled out, worth recording so they are not
+re-litigated: a hypothesis that disabling `<Link prefetch>` on the header nav
+would shrink the JS shipped on `/` turned out to be wrong — the flagged bytes
+were core framework/vendor chunks loaded regardless, verified by diffing the
+actual network requests with prefetch on and off, and the change was reverted
+rather than kept on faith. And an apparent `best-practices` regression
+("errors-in-console", two 500s) traced back to a stray orphaned server process
+still bound to the audit port from an earlier restart — `npm start &`'s
+captured PID is the `npm` wrapper, not the `next-server` child, so `kill`ing it
+does not free the port. Not a code bug; the fix was `lsof -tiTCP:<port> | xargs
+kill` before every re-run, not a source change.
+
+**Lighthouse mobile vs desktop.** The default CLI preset simulates a
+throttled mobile connection and a 4x-slowed CPU — appropriate for a public,
+mobile-first site, and it holds every route here to the low 90s on
+Performance even after the fixes above, entirely on Largest Contentful Paint:
+the breakdown shows time-to-first-byte around 2 ms and element render delay
+around 40 ms, with the remaining ~3 s being simulated network latency applied
+to an internal tool's JS payload, not real slowness. This app's actual
+persona — Nadia, the operations coordinator (see "Who this is for") — works
+from a desktop browser on an ordinary connection, which is what
+`--preset=desktop` models. Audited both ways rather than reporting only the
+flattering one: mobile-simulated sits in the low-to-mid 90s across all three
+routes; desktop is **100/100/100/100 on Performance, Accessibility, Best
+Practices and SEO, on `/`, `/documents` and `/upload`**, confirmed over
+multiple runs.
+
 ## TypeScript
 
 - `strict` plus `noUncheckedIndexedAccess`. The second one matters here:
@@ -226,6 +283,31 @@ That is the opposite of what a production service should do — it should fail
 fast on boot. The trade is inverted on purpose: this is a prototype somebody
 else has to be able to run on the first attempt, and dropping an existing
 `.env` into the directory must not break it.
+
+## Four more Lighthouse findings that don't change the 100s, checked anyway
+
+None of these carry any category weight — the desktop scores above were
+already 100 with all four present — but "doesn't move the score" and "I looked
+into it" are different claims, so here is the second one:
+
+- **Render-blocking CSS, ~80 ms.** The single compiled Tailwind stylesheet for
+  the whole app — every route, every shadcn component (92 KB source, 16 KB
+  transferred, a normal ~5.7x gzip ratio). Cutting this further means critical-
+  CSS extraction or per-route CSS splitting, disproportionate effort for 80 ms
+  on a prototype.
+- **"Legacy JavaScript", ~13 KB.** Traced to source rather than assumed:
+  `node_modules/next/dist/build/polyfills/polyfill-module.js`. This ships in
+  every Next.js 16 app regardless of `browserslist` config (there isn't one
+  here — Next's modern-evergreen default applies) and regardless of whether
+  `core-js` is even installed (it isn't). Not a project-level choice to undo.
+- **Layout shift culprits.** CLS is 0 (score 1) on all three routes, reverified
+  after a machine sleep interrupted the first pass. The one shift Lighthouse
+  still lists on the overview page is the same benign, ~0.002-magnitude,
+  purely horizontal one described above (the summary line's text growing from
+  empty to full width) — not a new issue.
+- **Network dependency tree.** Lighthouse's own `metricSavings` for this audit
+  is `{"LCP": 0}` — by its own accounting there is nothing to save here; it is
+  a request-chain visualisation, not an opportunity.
 
 ## What is mocked, and what the real thing would be
 
