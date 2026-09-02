@@ -22,6 +22,11 @@ const serverEnvSchema = z.object({
   /** Simulated per-document processing latency, milliseconds. */
   SIM_LATENCY_MIN_MS: z.coerce.number().int().min(0).default(400),
   SIM_LATENCY_MAX_MS: z.coerce.number().int().min(0).default(2600),
+  /**
+   * Stand-in for the network on the ingest path. Without it a local upload
+   * completes too fast for progress, pause or cancel to be observable.
+   */
+  SIM_INGEST_LATENCY_MS: z.coerce.number().int().min(0).default(700),
   /** Share of documents that end in `failed`. */
   SIM_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0.08),
   /** Share of documents that end in `needs_review`. */

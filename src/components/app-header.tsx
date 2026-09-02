@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 const NAV = [
   { href: '/', label: 'Overview' },
   { href: '/documents', label: 'Documents' },
+  { href: '/upload', label: 'Upload' },
 ] as const;
 
 export function AppHeader() {

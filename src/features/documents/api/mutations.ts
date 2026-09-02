@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { request } from '@/lib/api/client';
 import {
   documentRecordSchema,
-  documentSummarySchema,
   retryOutcomeSchema,
   type DocumentFilters,
   type ExtractedFieldKey,
@@ -39,20 +38,9 @@ export function correctField(input: {
   });
 }
 
-export function ingestFile(input: {
-  fileName: string;
-  fileSize: number;
-  mimeType: string;
-  batchId: string | null;
-  signal?: AbortSignal;
-}) {
-  const { signal, ...body } = input;
-  return request('/uploads', documentSummarySchema, {
-    method: 'POST',
-    body,
-    ...(signal ? { signal } : {}),
-  });
-}
+// Ingest deliberately does not live here. It is the one request that needs
+// upload progress, which `fetch` cannot report, so it uses XMLHttpRequest in
+// `features/upload/lib/upload-file.ts` rather than the shared client.
 
 const scaleResultSchema = z.object({
   size: z.number().int(),
