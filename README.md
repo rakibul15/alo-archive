@@ -231,6 +231,26 @@ simulated network latency against an internal tool's JS payload — TTFB is
 ~2 ms) and `--preset=desktop`, which matches this app's actual persona and
 comes back **100 across the board** on `/`, `/documents` and `/upload`.
 
+**Reproducing this — two things have to match, or the score will not:**
+
+```bash
+npm run build && npm start   # production build; `npm run dev` scores lower
+                              # and is not representative — no minification,
+                              # no prod optimisations, HMR overhead
+```
+
+Then audit `http://localhost:3000` (and `/documents`, `/upload`) one of two ways:
+
+- **CLI** (simplest, always clean): `npx lighthouse http://localhost:3000 --preset=desktop`
+- **Chrome DevTools:** open an **Incognito window** first, *then* the Lighthouse
+  panel → Desktop → Analyze page load. A regular browser profile can pull
+  extensions and cached site data into the run — Lighthouse says so itself,
+  at the top of the report, when that happens ("There may be stored data
+  affecting loading performance…"), and it shows up mainly as inflated CLS.
+  Confirmed directly: the same build scored 100/100/100/100 from the CLI and
+  from Incognito, and dropped to Performance 87 (CLS 0.26) from a normal,
+  extension-carrying Chrome profile on the same machine.
+
 ## Assumptions and trade-offs
 
 In [`ASSUMPTIONS.md`](./ASSUMPTIONS.md) — what was assumed, what was
