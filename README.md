@@ -50,6 +50,7 @@ npm run verify   # lint, types, colour contrast, tests, production build
 | `npm run lint` | ESLint, including the no-raw-colours rule |
 | `npm run typecheck` | Route typegen, then `tsc --noEmit` |
 | `npm run check:contrast` | Fails if any colour token drops below WCAG AA |
+| `npm run e2e` | Playwright, against a real production build it starts itself |
 
 ## Seeing it at scale
 
@@ -161,7 +162,14 @@ A pure state machine (`features/upload/lib/queue.ts`) with no React and no
 `fetch` in it: the interesting behaviour is scheduling — how many uploads run
 at once, when a failure deserves another attempt, how long to wait first — and
 none of that should need a rendered component to test. Nineteen unit tests
-cover it directly.
+cover it directly, and `npm run e2e` (Playwright) covers the one thing unit
+tests structurally can't: a real upload failing, automatic retries backing
+off and exhausting, and a manual retry recovering it, driven through an
+actual browser against a real production build — the flow this project's own
+manual QA broke twice on (the queue panel collapsing to one row, then the
+batch-summary card's text clipping), for the same reason both times: a real
+failure state changes the page's shape in ways a run that only ever succeeds
+never exercises.
 
 - **Concurrency is capped at six.** Measured, not assumed: instrumenting
   `XMLHttpRequest` across a 60-file batch tops out at exactly six in flight.
@@ -298,6 +306,4 @@ reading the source:
   a refresh mid-batch can tell you exactly which files to re-select.
 - Resumable uploads — presigned multipart with a resume token.
 - Real virtualised column resizing and a saved-view system for filters.
-- Playwright coverage for the upload → failure → retry path; it is currently
-  covered at the unit level only.
 - An accessibility audit with a real screen reader rather than by inspection.

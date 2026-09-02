@@ -16,6 +16,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e": "playwright test",
     "check:contrast": "node scripts/check-contrast.mjs",
     "verify": "npm run lint && npm run typecheck && npm run check:contrast && npm run test && npm run build",
     "prepare": "husky"
@@ -54,6 +55,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
