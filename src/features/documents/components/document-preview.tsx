@@ -142,6 +142,16 @@ function PageChrome({ record }: { record: DocumentRecord }) {
 
       {EXTRACTED_FIELD_KEYS.map((key, index) => {
         const y = 0.278 * PAGE_HEIGHT + index * 0.084 * PAGE_HEIGHT;
+        // The ruled line's y is this fixed per-slot formula; a field's box
+        // comes from the extractor's own (independent) coordinates. The two
+        // aren't guaranteed to land in the same place — in practice the line
+        // usually crossed a few units *inside* the box rather than sitting
+        // under it, and ran past the box's right edge, reading as a stray
+        // second border rather than the ruled line it was meant to be. A box
+        // already shows exactly where the value is; once it exists, the line
+        // underneath it is redundant as well as misaligned, so it's only
+        // drawn for fields with nothing to point at.
+        const hasBox = record.extracted?.[key]?.box != null;
         return (
           <g key={key}>
             <text
@@ -152,15 +162,16 @@ function PageChrome({ record }: { record: DocumentRecord }) {
             >
               {FIELD_LABELS[key]}
             </text>
-            {/* The ruled line the value was written on. */}
-            <line
-              x1={330}
-              y1={y + 46}
-              x2={PAGE_WIDTH - 80}
-              y2={y + 46}
-              className="stroke-border"
-              strokeWidth={2}
-            />
+            {hasBox ? null : (
+              <line
+                x1={330}
+                y1={y + 46}
+                x2={PAGE_WIDTH - 80}
+                y2={y + 46}
+                className="stroke-border"
+                strokeWidth={2}
+              />
+            )}
           </g>
         );
       })}
