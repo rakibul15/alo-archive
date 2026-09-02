@@ -10,6 +10,12 @@
 !.yarn/releases
 !.yarn/versions
 
+# this project is npm-only (see README) — package-lock.json is the one
+# lockfile that's meant to be committed; a stray pnpm-lock.yaml or
+# yarn.lock from someone's local tooling should never land in git
+pnpm-lock.yaml
+yarn.lock
+
 # testing
 /coverage
 
