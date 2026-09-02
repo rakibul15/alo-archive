@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDownIcon, ArrowUpIcon, FileSearchIcon } from 'lucide-react';
@@ -107,7 +107,7 @@ export function DocumentsTable({
 
   // React Compiler cannot memoize a component that consumes `useVirtualizer` —
   // the hook hands back fresh function identities every render by design, and
-  // memoizing them would serve stale measurements. The compiler therefore skips
+  // memorizing them would serve stale measurements. The compiler therefore skips
   // this component, which is the correct outcome rather than a problem to fix:
   // the component is already cheap because only ~30 rows exist in the DOM.
   // eslint-disable-next-line react-hooks/incompatible-library -- see above
@@ -170,8 +170,8 @@ export function DocumentsTable({
   }
 
   /**
-   * Arrow-key navigation over a virtualised grid. Rows that are not rendered
-   * cannot be focused, so movement goes through the virtualiser first and the
+   * Arrow-key navigation over a virtualized grid. Rows that are not rendered
+   * cannot be focused, so movement goes through the virtualized first and the
    * row picks up focus when it mounts.
    */
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {

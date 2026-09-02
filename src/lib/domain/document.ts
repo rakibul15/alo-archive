@@ -65,6 +65,29 @@ export const fieldStatusSchema = z.enum([
 export type FieldStatus = z.infer<typeof fieldStatusSchema>;
 
 /**
+ * Where on the page a value was read from.
+ *
+ * Normalised to 0–1 rather than pixels, which is what real extraction services
+ * return (Google Document AI's normalised vertices, Rossum's bounding boxes).
+ * It keeps the geometry independent of the resolution the page was scanned at
+ * and of the size it happens to be displayed at.
+ *
+ * It lives on the record rather than being worked out in the browser on
+ * purpose: the position of a value on the page is something the extractor
+ * knows and the client cannot. Modelling it the other way round would make the
+ * preview a drawing that happens to look right rather than a rendering of what
+ * the server actually reported.
+ */
+export const boundingBoxSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  width: z.number().min(0).max(1),
+  height: z.number().min(0).max(1),
+  page: z.number().int().min(1),
+});
+export type BoundingBox = z.infer<typeof boundingBoxSchema>;
+
+/**
  * Confidence is per field, not per document. A scanned intake sheet can have a
  * perfectly legible name next to a smudged phone number; collapsing that into
  * one number per document throws away the only information that tells the
@@ -76,6 +99,8 @@ export const fieldValueSchema = z.object({
   status: fieldStatusSchema,
   /** What OCR thought it saw, kept so a correction can be compared to it. */
   raw: z.string().nullable(),
+  /** Null when nothing was found on the page to point at. */
+  box: boundingBoxSchema.nullable(),
 });
 export type FieldValue = z.infer<typeof fieldValueSchema>;
 

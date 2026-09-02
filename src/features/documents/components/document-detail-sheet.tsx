@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronLeftIcon,
@@ -43,6 +43,7 @@ import {
   useRetryDocuments,
 } from '../hooks/use-document-mutations';
 import { ConfidenceIndicator } from './confidence-indicator';
+import { DocumentPreview } from './document-preview';
 import { StatusBadge } from './status-badge';
 
 const dateTimeFormat = new Intl.DateTimeFormat('en-GB', {
@@ -95,7 +96,16 @@ export function DocumentDetailSheet({
     >
       <SheetContent
         side="right"
-        className="w-full gap-0 overflow-y-auto sm:max-w-lg"
+        // Wide enough for the page and the fields side by side. A narrow panel
+        // forces the operator to scroll between the value and the thing they
+        // are checking it against, which defeats the point of showing both.
+        //
+        // The `data-[side=right]:` prefix is load-bearing: the base component
+        // sets `data-[side=right]:sm:max-w-sm`, and tailwind-merge treats a
+        // differently-prefixed `sm:max-w-5xl` as a separate utility rather than
+        // a conflicting one, so both survive and the narrower one wins on
+        // source order. Matching the prefix is what actually overrides it.
+        className="w-full gap-0 overflow-y-auto data-[side=right]:sm:max-w-5xl"
         onEscapeKeyDown={(event) => {
           if (editingField !== null) event.preventDefault();
         }}
@@ -200,6 +210,36 @@ function DetailContent({
 }) {
   const retry = useRetryDocuments();
 
+  /**
+   * The link between the page and the field list, in both directions: hovering
+   * or focusing a field lights up its box, and clicking a box brings the field
+   * into view. One piece of state rather than two, so they cannot disagree
+   * about what is currently being looked at.
+   */
+  const [activeField, setActiveField] = useState<ExtractedFieldKey | null>(
+    null,
+  );
+  const fieldRefs = useRef(new Map<ExtractedFieldKey, HTMLDivElement>());
+
+  const registerFieldRef = useCallback(
+    (key: ExtractedFieldKey, element: HTMLDivElement | null) => {
+      if (element) {
+        fieldRefs.current.set(key, element);
+      } else {
+        fieldRefs.current.delete(key);
+      }
+    },
+    [],
+  );
+
+  const focusField = useCallback((key: ExtractedFieldKey) => {
+    setActiveField(key);
+    fieldRefs.current.get(key)?.scrollIntoView({
+      block: 'nearest',
+      behavior: 'smooth',
+    });
+  }, []);
+
   const position = orderedIds.indexOf(record.id);
   const previousId = position > 0 ? orderedIds[position - 1] : undefined;
   const nextId =
@@ -293,32 +333,46 @@ function DetailContent({
         ) : null}
 
         {record.extracted ? (
-          <section className="space-y-2">
-            <div className="flex items-baseline justify-between gap-2">
-              <h3 className="text-sm font-medium">Extracted fields</h3>
-              {record.status === 'needs_review' ? (
-                <p className="text-xs text-status-needs-review">
-                  Correct the flagged fields to clear this document
-                </p>
-              ) : null}
-            </div>
-            <dl className="divide-y divide-border">
-              {EXTRACTED_FIELD_KEYS.map((key) => (
-                <FieldRow
-                  key={key}
-                  documentId={record.id}
-                  fieldKey={key}
-                  label={FIELD_LABELS[key]}
-                  field={record.extracted?.[key]}
-                  formatValue={
-                    key === 'documentType' ? documentTypeLabel : undefined
-                  }
-                  isEditing={editingField === key}
-                  onEditingChange={onEditingChange}
-                />
-              ))}
-            </dl>
-          </section>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <DocumentPreview
+              record={record}
+              activeField={activeField}
+              onActivate={focusField}
+              // Sticky so the page stays put while the field list scrolls —
+              // the comparison only works if both are on screen at once.
+              className="lg:sticky lg:top-2 lg:self-start"
+            />
+
+            <section className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-sm font-medium">Extracted fields</h3>
+                {record.status === 'needs_review' ? (
+                  <p className="text-xs text-status-needs-review">
+                    Correct the flagged fields to clear this document
+                  </p>
+                ) : null}
+              </div>
+              <dl className="divide-y divide-border">
+                {EXTRACTED_FIELD_KEYS.map((key) => (
+                  <FieldRow
+                    key={key}
+                    documentId={record.id}
+                    fieldKey={key}
+                    label={FIELD_LABELS[key]}
+                    field={record.extracted?.[key]}
+                    formatValue={
+                      key === 'documentType' ? documentTypeLabel : undefined
+                    }
+                    isEditing={editingField === key}
+                    onEditingChange={onEditingChange}
+                    isActive={activeField === key}
+                    onActiveChange={setActiveField}
+                    registerRef={registerFieldRef}
+                  />
+                ))}
+              </dl>
+            </section>
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">
             Nothing has been extracted from this document yet.
@@ -371,6 +425,9 @@ function FieldRow({
   formatValue,
   isEditing,
   onEditingChange,
+  isActive,
+  onActiveChange,
+  registerRef,
 }: {
   documentId: string;
   fieldKey: ExtractedFieldKey;
@@ -379,6 +436,9 @@ function FieldRow({
   formatValue?: (value: string) => string;
   isEditing: boolean;
   onEditingChange: (field: ExtractedFieldKey | null) => void;
+  isActive: boolean;
+  onActiveChange: (field: ExtractedFieldKey | null) => void;
+  registerRef: (key: ExtractedFieldKey, element: HTMLDivElement | null) => void;
 }) {
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -437,7 +497,27 @@ function FieldRow({
   };
 
   return (
-    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-3 py-3">
+    <div
+      ref={(element) => {
+        registerRef(fieldKey, element);
+      }}
+      // Pointer and keyboard both drive the highlight. Focus matters as much as
+      // hover here: someone tabbing through the fields should see the page
+      // follow them, not just someone with a mouse.
+      onMouseEnter={() => {
+        onActiveChange(fieldKey);
+      }}
+      onMouseLeave={() => {
+        onActiveChange(null);
+      }}
+      onFocusCapture={() => {
+        onActiveChange(fieldKey);
+      }}
+      className={cn(
+        '-mx-2 grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-3 rounded-md px-2 py-3 transition-colors',
+        isActive && 'bg-muted/60',
+      )}
+    >
       <dt className="pt-1 text-sm text-muted-foreground">{label}</dt>
       <dd className="space-y-1">
         {isEditing ? (

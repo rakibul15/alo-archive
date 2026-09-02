@@ -187,6 +187,18 @@ error code, so the toast can say *why* 117 documents were refused.
 
 ### The review loop
 
+The panel is a split screen: a page on one side, the extracted fields on the
+other. Comparing the machine's reading against the paper is the whole job, and
+a panel that shows only the values is asking to be rubber-stamped.
+
+The scans themselves are not kept, so the page is a stand-in — but it is drawn
+from the bounding boxes the server reports per field, not sketched to look
+plausible, so the highlights sit exactly where the values were read from and
+cannot drift from the data. Hovering or focusing a field lights up its box;
+clicking a box scrolls to the field. A missing field has no box at all, because
+there is nothing on the page to point at.
+
+
 Low-confidence and missing fields are flagged in place and corrected in place;
 a correction is pinned to full confidence, marked `corrected`, and if it lifts
 the document above the review threshold it leaves the queue on its own. The

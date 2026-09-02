@@ -67,6 +67,56 @@ describe('extraction confidence distribution', () => {
   });
 });
 
+describe('bounding boxes', () => {
+  it('gives every extracted value a place on the page', () => {
+    for (const index of indices.slice(0, 60)) {
+      const fields = buildExtractedFields(deriveCore(index, ANCHOR), false);
+      for (const field of Object.values(fields)) {
+        expect(field.box).not.toBeNull();
+      }
+    }
+  });
+
+  it('gives a missing field no box at all', () => {
+    // There is nothing on the page to point at, and drawing a box anyway would
+    // be a lie about where the extractor looked.
+    const withMissing = indices
+      .map((index) => buildExtractedFields(deriveCore(index, ANCHOR), true))
+      .flatMap((fields) => Object.values(fields))
+      .filter((field) => field.status === 'missing');
+
+    expect(withMissing.length).toBeGreaterThan(0);
+    expect(withMissing.every((field) => field.box === null)).toBe(true);
+  });
+
+  it('keeps every box inside the page', () => {
+    for (const index of indices) {
+      const fields = buildExtractedFields(deriveCore(index, ANCHOR), true);
+      for (const field of Object.values(fields)) {
+        if (!field.box) continue;
+        expect(field.box.x).toBeGreaterThanOrEqual(0);
+        expect(field.box.y).toBeGreaterThanOrEqual(0);
+        expect(field.box.x + field.box.width).toBeLessThanOrEqual(1.001);
+        expect(field.box.y + field.box.height).toBeLessThanOrEqual(1.001);
+      }
+    }
+  });
+
+  it('never overlaps two fields, so a highlight is unambiguous', () => {
+    const fields = buildExtractedFields(deriveCore(11, ANCHOR), false);
+    const rows = Object.values(fields)
+      .flatMap((field) => (field.box ? [field.box] : []))
+      .sort((a, b) => a.y - b.y);
+
+    for (let i = 1; i < rows.length; i++) {
+      const previous = rows[i - 1];
+      const current = rows[i];
+      if (!previous || !current) continue;
+      expect(current.y).toBeGreaterThanOrEqual(previous.y + previous.height);
+    }
+  });
+});
+
 describe('raw OCR text', () => {
   it('differs from the cleaned value on damaged numeric fields', () => {
     // Phone numbers and dates are exactly the fields an operator needs to

@@ -385,6 +385,8 @@ class Archive {
         confidence: 1,
         status: 'corrected',
         raw: fields[key].raw ?? fields[key].value,
+        // The correction replaces the value, not the place it came from.
+        box: fields[key].box,
       };
     }
     return corrected;

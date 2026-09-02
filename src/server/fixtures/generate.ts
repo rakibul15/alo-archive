@@ -125,17 +125,68 @@ export function searchTextFor(core: DocumentCore): string {
   return `${core.personName} ${core.location} ${core.programName} ${core.fileName} ${core.id}`.toLowerCase();
 }
 
-function ok(value: string, confidence: number): FieldValue {
-  return { value, confidence, status: 'ok', raw: null };
+/**
+ * Where each field sits on the page, as fractions of the page box.
+ *
+ * A fixed skeleton — these are printed forms, so the label column and the
+ * answer column are in the same place on every copy — with a little
+ * per-document jitter applied below, because no two scans are fed through a
+ * scanner at quite the same angle or offset.
+ */
+const FIELD_LAYOUT: Record<
+  ExtractedFieldKey,
+  { x: number; y: number; width: number; height: number }
+> = {
+  personName: { x: 0.34, y: 0.278, width: 0.5, height: 0.042 },
+  phone: { x: 0.34, y: 0.362, width: 0.36, height: 0.042 },
+  location: { x: 0.34, y: 0.446, width: 0.52, height: 0.042 },
+  programName: { x: 0.34, y: 0.53, width: 0.56, height: 0.042 },
+  documentDate: { x: 0.34, y: 0.614, width: 0.34, height: 0.042 },
+  documentType: { x: 0.34, y: 0.698, width: 0.46, height: 0.042 },
+};
+
+function boxFor(
+  key: ExtractedFieldKey,
+  rng: () => number,
+): NonNullable<FieldValue['box']> {
+  const base = FIELD_LAYOUT[key];
+  const drift = (amount: number) => (rng() - 0.5) * amount;
+  return {
+    x: clamp01(base.x + drift(0.012)),
+    y: clamp01(base.y + drift(0.008)),
+    width: clamp01(base.width + drift(0.02)),
+    height: base.height,
+    page: 1,
+  };
+}
+
+const clamp01 = (value: number) => Math.min(Math.max(value, 0), 1);
+
+function ok(
+  value: string,
+  confidence: number,
+  box: FieldValue['box'],
+): FieldValue {
+  return { value, confidence, status: 'ok', raw: null, box };
 }
 
 /** A value OCR got partly wrong: kept, flagged, and shown next to the original. */
-function uncertain(value: string, confidence: number, raw: string): FieldValue {
-  return { value, confidence, status: 'low_confidence', raw };
+function uncertain(
+  value: string,
+  confidence: number,
+  raw: string,
+  box: FieldValue['box'],
+): FieldValue {
+  return { value, confidence, status: 'low_confidence', raw, box };
 }
 
+/**
+ * Nothing was found. The box is null rather than empty: there is no region of
+ * the page to point the operator at, and drawing one would be a lie about where
+ * the extractor looked.
+ */
 function missing(raw: string | null): FieldValue {
-  return { value: null, confidence: 0, status: 'missing', raw };
+  return { value: null, confidence: 0, status: 'missing', raw, box: null };
 }
 
 /**
@@ -197,7 +248,11 @@ export function buildExtractedFields(
     const [low, high] = chance(rng, 0.22) ? [0.78, 0.9] : [0.93, 0.999];
     const fields = {} as Record<ExtractedFieldKey, FieldValue>;
     for (const key of EXTRACTED_FIELD_KEYS) {
-      fields[key] = ok(source[key], floatBetween(rng, low, high));
+      fields[key] = ok(
+        source[key],
+        floatBetween(rng, low, high),
+        boxFor(key, rng),
+      );
     }
     return fields;
   }
@@ -215,7 +270,7 @@ export function buildExtractedFields(
     if (!damaged.has(key)) {
       // Undamaged fields stay high so the document's minimum is unambiguously
       // the damaged one — the number points at the field that needs attention.
-      fields[key] = ok(value, floatBetween(rng, 0.91, 0.99));
+      fields[key] = ok(value, floatBetween(rng, 0.91, 0.99), boxFor(key, rng));
       continue;
     }
     fields[key] = chance(rng, 0.35)
@@ -224,6 +279,7 @@ export function buildExtractedFields(
           value,
           floatBetween(rng, 0.32, LOW_CONFIDENCE_THRESHOLD - 0.01),
           smudge(value, rng),
+          boxFor(key, rng),
         );
   }
   return fields;

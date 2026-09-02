@@ -12,6 +12,7 @@ const field = (confidence: number): FieldValue => ({
   confidence,
   status: 'ok',
   raw: null,
+  box: { x: 0.1, y: 0.1, width: 0.2, height: 0.04, page: 1 },
 });
 
 const fields = (confidences: number[]): ExtractedFields => ({

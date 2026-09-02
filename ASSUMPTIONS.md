@@ -157,6 +157,33 @@ Two smaller decisions in the queue:
 - **Cancelled files leave the denominator.** Otherwise a batch the operator
   deliberately stopped reads as permanently stuck at 23% instead of finished.
 
+## The page is shown next to the fields
+
+The operator's actual job is comparing what the machine read against what is on
+the paper. Without the paper they cannot verify anything — only accept or guess
+— so a review panel showing extracted values alone invites rubber-stamping.
+Every serious tool in this category is a split screen for that reason.
+
+The original scans are not kept (ingest receives the bytes and discards them),
+so the panel renders a stand-in page. The important part is that it is **not
+drawn freehand**: each value is placed inside the bounding box the server
+reported for that field, and the highlight overlay reads the same boxes. The
+preview and the data cannot drift apart because they are the same numbers.
+
+`box` therefore lives on `FieldValue` in the schema, normalised to 0–1 the way
+real extraction services return it (Google Document AI's normalised vertices,
+Rossum's bounding boxes). Working the geometry out in the browser instead would
+have modelled it backwards: where a value sits on the page is something the
+extractor knows and the client cannot.
+
+A missing field has **no box at all** rather than an empty one — there is
+nothing on the page to point at, and drawing a rectangle anyway would be a lie
+about where the extractor looked.
+
+The link runs both ways: hovering or focusing a field highlights its box, and
+clicking a box scrolls to the field. Focus is wired as well as hover, so
+tabbing through the fields moves the highlight too.
+
 ## Bulk actions send a query, not an id list
 
 Selection is a mode plus a small exception set — `include` (nothing but these)
