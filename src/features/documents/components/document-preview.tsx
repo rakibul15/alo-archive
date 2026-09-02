@@ -14,6 +14,31 @@ const PAGE_WIDTH = 1000;
 const PAGE_HEIGHT = 1414;
 
 /**
+ * What goes on the page for a given field.
+ *
+ * For an `ok` or `low_confidence` field this is deliberately the *raw* read
+ * where one exists, not the cleaned-up value — the page stands in for the
+ * physical paper, so it shows what a scanner actually produced, matching the
+ * "Scanned as" line in the field list next to it.
+ *
+ * A `corrected` field breaks that rule on purpose. `raw` there is kept only as
+ * history of the original, wrong read; showing it on the page after a human
+ * has fixed the value would mean the field list visibly changes while the
+ * page beside it keeps displaying the mistake being corrected — the "I fixed
+ * it and nothing happened" experience a review screen exists to prevent. Once
+ * corrected, the page shows the corrected value, because the operator has now
+ * confirmed that is what the paper actually says.
+ *
+ * Exported and pure so this can be unit tested directly rather than only
+ * verified by rendering the page.
+ */
+export function inkedTextFor(field: FieldValue): string {
+  return field.status === 'corrected'
+    ? (field.value ?? '')
+    : (field.raw ?? field.value ?? '');
+}
+
+/**
  * The page beside the fields.
  *
  * The operator's actual job is comparing what the machine read against what is
@@ -178,16 +203,41 @@ function FieldMark({
   const width = field.box.width * PAGE_WIDTH;
   const height = field.box.height * PAGE_HEIGHT;
 
-  const tone =
+  const stroke =
     field.status === 'corrected'
-      ? 'stroke-status-completed fill-status-completed'
+      ? 'stroke-status-completed'
       : field.status === 'low_confidence'
-        ? 'stroke-status-needs-review fill-status-needs-review'
-        : 'stroke-status-uploading fill-status-uploading';
+        ? 'stroke-status-needs-review'
+        : 'stroke-status-uploading';
 
-  // What the scanner "saw" — the raw read where there is one, so the page and
-  // the "Scanned as" line in the field list agree with each other.
-  const inked = field.raw ?? field.value ?? '';
+  // The highlight fill, opacity included in the same utility via Tailwind's
+  // slash syntax rather than a separate `fill-opacity-*` class.
+  //
+  // Two things had to be true together for this to work, and originally
+  // neither was: (1) standalone `fill-opacity-*` utilities do not exist in
+  // Tailwind v4 — the project still had `fill-opacity-0` / `fill-opacity-20`
+  // left over from v3 habits, and they compiled to no CSS at all; (2) even if
+  // they had existed, `cn()` runs everything through `tailwind-merge`, which
+  // groups any `fill-*` colour utility together with `fill-opacity-*` as one
+  // conflicting group and keeps only the last one — silently deleting the
+  // colour class and leaving the opacity class to do nothing on its own. The
+  // net effect was every box falling back to the SVG default, fully opaque
+  // black, which reads as fine over light foreground text in dark mode and as
+  // a solid black bar over near-black text in light mode.
+  const fill =
+    field.status === 'corrected'
+      ? isActive
+        ? 'fill-status-completed/20'
+        : 'fill-status-completed/0'
+      : field.status === 'low_confidence'
+        ? isActive
+          ? 'fill-status-needs-review/20'
+          : 'fill-status-needs-review/0'
+        : isActive
+          ? 'fill-status-uploading/20'
+          : 'fill-status-uploading/0';
+
+  const inked = inkedTextFor(field);
 
   return (
     <g
@@ -209,7 +259,7 @@ function FieldMark({
         width={width}
         height={height}
         rx={6}
-        className={cn(tone, isActive ? 'fill-opacity-20' : 'fill-opacity-0')}
+        className={cn(stroke, fill)}
         strokeWidth={isActive ? 5 : 2.5}
         strokeDasharray={field.status === 'low_confidence' ? '10 6' : undefined}
       />
