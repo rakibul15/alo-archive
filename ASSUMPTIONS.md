@@ -82,6 +82,18 @@ knowing what was skipped is different from forgetting it.
     the archive. It would not survive a multi-instance deployment; that is the
     correct trade for a prototype and the wrong one for production.
 12. **Modern evergreen browsers only.** No polyfills, no IE-era fallbacks.
+13. **Uploads are capped at 25 MB and 64 bytes, and to five file types** (PDF,
+    JPEG, PNG, TIFF, HEIC — see `upload-constraints.ts`). No brief mandate
+    behind these numbers; they are a stand-in for "a single scanned form or ID
+    photo," sized well above a real one (a multi-page scanned PDF is typically
+    a few MB) and well below anything that would make an in-browser upload
+    slow enough to need chunking, which is out of scope here. The 64-byte
+    floor exists only to reject empty/near-empty garbage, not legitimately
+    tiny images. Both bounds are enforced identically client-side (instant
+    feedback, and the dropzone helper text states them) and server-side (a
+    client check is not a check). Unlike the simulated-pipeline numbers in
+    assumption 2, these are **not** exposed through `.env.example` — they are
+    a fixed product decision, not a tuning knob for demoing the pipeline.
 
 ## Design tokens
 
