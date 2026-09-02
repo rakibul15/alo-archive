@@ -31,8 +31,8 @@ Every feature belongs to one of these. Anything that did not was cut.
 
 | #  | Feature | State |
 | -- | ------- | ----- |
-| M1 | Bulk and single upload, drag-and-drop, folder drop | not started |
-| M2 | Upload queue with bounded concurrency, per-file and aggregate progress, pause/cancel | not started |
+| M1 | Bulk and single upload, drag-and-drop, folder drop | done |
+| M2 | Upload queue with bounded concurrency, per-file and aggregate progress, pause/cancel | done |
 | M3 | Processing progress over SSE — pending → processing → terminal | stream + client subscription done |
 | M4 | Virtualised document table, server-side filter/sort/search | done |
 | M5 | Status summary, click-through to a filtered view | done |
@@ -120,6 +120,27 @@ a text label (WCAG 1.4.1).
 - No `any`, no `as` casts at boundaries — `unknown` plus a parse instead.
 - Branded id types were tried and removed: with fixtures and route params they
   cost a cast at every construction site and paid back nothing at this scale.
+
+## Upload progress is real; the storage is not
+
+The upload path is the one request in the app that does not go through the
+shared `fetch` client. `fetch` still cannot report upload progress in any
+shipping browser, so ingest uses `XMLHttpRequest` for its
+`upload.onprogress` events. The bytes are genuinely sent and genuinely
+discarded server-side — the progress bar reflects bytes leaving the machine
+rather than an animation timed to look plausible.
+
+The ingest route carries a deliberate delay (`SIM_INGEST_LATENCY_MS`, 700 ms by
+default). Over localhost a 2 MB upload completes in single-digit milliseconds,
+which makes progress, pause and cancel impossible to see and therefore
+impossible to judge.
+
+Two smaller decisions in the queue:
+
+- **Aggregate progress is weighted by bytes, not file count.** Finishing a 1 MB
+  file out of a 1 MB and a 9 MB pair is 10% done, not 50%.
+- **Cancelled files leave the denominator.** Otherwise a batch the operator
+  deliberately stopped reads as permanently stuck at 23% instead of finished.
 
 ## Bulk actions send a query, not an id list
 

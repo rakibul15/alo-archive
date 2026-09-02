@@ -4,10 +4,8 @@ A frontend prototype for digitising the Alo Relief Trust document archive:
 upload documents in bulk, watch them move through processing, and review the
 records that came out uncertain.
 
-> **Status: in progress.** Everything except upload is done and covered by
-> tests — browsing, filtering, the detail panel, failure handling and the
-> review loop. Upload (M1–M2) is the remaining piece. `ASSUMPTIONS.md` tracks
-> the state of each item.
+> All nine features in scope are built and covered by tests. `ASSUMPTIONS.md`
+> records what was assumed, what was deliberately left out, and why.
 
 ## Running it
 
@@ -135,6 +133,33 @@ whether it is worth retrying. Retryability is a property of the error code
 rather than a flag: `OCR_TIMEOUT` can be retried, `PASSWORD_PROTECTED` never
 can, and a retry button that cannot succeed teaches people to distrust every
 retry button.
+
+### The upload queue
+
+A pure state machine (`features/upload/lib/queue.ts`) with no React and no
+`fetch` in it: the interesting behaviour is scheduling — how many uploads run
+at once, when a failure deserves another attempt, how long to wait first — and
+none of that should need a rendered component to test. Nineteen unit tests
+cover it directly.
+
+- **Concurrency is capped at six.** Measured, not assumed: instrumenting
+  `XMLHttpRequest` across a 60-file batch tops out at exactly six in flight.
+  Dropping five thousand files must not open five thousand requests.
+- **Retries back off exponentially, with jitter.** The jitter matters more than
+  the exponent — when an ingest service blips, every in-flight upload fails at
+  the same instant, and without jitter all six retry at the same instant too,
+  reproducing the load that caused the failure. A 4% server-side failure rate
+  means this path runs in ordinary use: a recent 164-file batch hit three 503s
+  and finished with zero user-visible failures.
+- **A 4xx is not retried.** The file itself is the problem; sending the same
+  bytes again just wastes four more attempts.
+- **Progress is real** (see `ASSUMPTIONS.md`), weighted by bytes rather than
+  file count, and cancelled files leave the denominator so a stopped batch
+  reads as finished rather than stuck.
+- **The queue cannot survive a reload** — a `File` handle is not serialisable
+  and a "resume" button would be a lie. So there is a beforeunload prompt while
+  work is in flight, and a breadcrumb that turns into a banner telling the
+  operator how many never made it.
 
 ### Bulk actions carry the query, not the ids
 
