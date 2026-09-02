@@ -38,8 +38,19 @@ export function UploadView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {/*
+        Every child here is natural-height content — none of it should ever
+        shrink below what it needs to render. `UploadQueuePanel` is the one
+        flexible, scrollable region (`flex-1`, with its own height floor); if
+        these siblings aren't protected with `shrink-0`, a tall stack of them
+        (the rejection banner and the batch-summary card both showing, say)
+        forces the *other* siblings to give up space instead — and because
+        the base `Card` component clips overflow, that showed up as the
+        batch-summary heading's text getting cut off on a short viewport,
+        not as the queue panel shrinking the way it's supposed to.
+      */}
       {interrupted ? (
-        <Alert>
+        <Alert className="shrink-0">
           <InfoIcon aria-hidden />
           <AlertTitle>
             {interrupted.pending} upload
@@ -69,7 +80,7 @@ export function UploadView() {
       <BatchSummaryCard />
 
       {completedCount > 0 ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="shrink-0 text-sm text-muted-foreground">
           {completedCount} document{completedCount === 1 ? '' : 's'} handed to
           the processing queue —{' '}
           <Link href="/documents" className="text-foreground underline">

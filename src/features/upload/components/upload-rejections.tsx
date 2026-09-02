@@ -47,7 +47,7 @@ export function UploadRejections() {
   );
 
   return (
-    <Alert>
+    <Alert className="shrink-0">
       <TriangleAlertIcon aria-hidden />
       <AlertTitle>
         {rejectedCount === 1

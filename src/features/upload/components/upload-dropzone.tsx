@@ -93,7 +93,7 @@ export function UploadDropzone() {
   });
 
   return (
-    <div className="space-y-3">
+    <div className="shrink-0 space-y-3">
       <div
         {...getRootProps()}
         className={cn(

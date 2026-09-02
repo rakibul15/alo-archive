@@ -36,7 +36,7 @@ export function BatchSummaryCard() {
   return (
     <Card
       className={cn(
-        'flex flex-col gap-3 border p-4 sm:flex-row sm:items-center sm:justify-between',
+        'flex shrink-0 flex-col gap-3 border p-4 sm:flex-row sm:items-center sm:justify-between',
         hasFailures
           ? 'border-status-needs-review/30 bg-status-needs-review/5'
           : 'border-status-completed/30 bg-status-completed/5',
