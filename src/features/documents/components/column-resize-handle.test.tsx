@@ -29,6 +29,7 @@ describe('ColumnResizeHandle', () => {
       <ColumnResizeHandle
         column="status"
         label="Status"
+        width={144}
         onResize={onResize}
         onReset={vi.fn()}
       />,
@@ -49,6 +50,7 @@ describe('ColumnResizeHandle', () => {
       <ColumnResizeHandle
         column="status"
         label="Status"
+        width={144}
         onResize={onResize}
         onReset={vi.fn()}
       />,
@@ -67,6 +69,7 @@ describe('ColumnResizeHandle', () => {
       <ColumnResizeHandle
         column="status"
         label="Status"
+        width={144}
         onResize={onResize}
         onReset={vi.fn()}
       />,
@@ -87,6 +90,7 @@ describe('ColumnResizeHandle', () => {
       <ColumnResizeHandle
         column="uploaded"
         label="Uploaded"
+        width={144}
         onResize={onResize}
         onReset={vi.fn()}
       />,
@@ -114,6 +118,7 @@ describe('ColumnResizeHandle', () => {
       <ColumnResizeHandle
         column="status"
         label="Status"
+        width={144}
         onResize={onResize}
         onReset={vi.fn()}
       />,
@@ -128,6 +133,7 @@ describe('ColumnResizeHandle', () => {
       <ColumnResizeHandle
         column="confidence"
         label="Confidence"
+        width={144}
         onResize={onResize}
         onReset={vi.fn()}
       />,
@@ -147,6 +153,7 @@ describe('ColumnResizeHandle', () => {
       <ColumnResizeHandle
         column="person"
         label="Name / outcome"
+        width={144}
         onResize={vi.fn()}
         onReset={onReset}
       />,
@@ -160,6 +167,7 @@ describe('ColumnResizeHandle', () => {
       <ColumnResizeHandle
         column="person"
         label="Name / outcome"
+        width={144}
         onResize={vi.fn()}
         onReset={vi.fn()}
       />,

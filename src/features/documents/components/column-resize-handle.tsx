@@ -2,7 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { ResizableColumn } from '../lib/column-widths';
+import {
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  type ResizableColumn,
+} from '../lib/column-widths';
 
 /**
  * The draggable edge of a resizable header cell.
@@ -19,11 +23,18 @@ import type { ResizableColumn } from '../lib/column-widths';
 export function ColumnResizeHandle({
   column,
   label,
+  width,
   onResize,
   onReset,
 }: {
   column: ResizableColumn;
   label: string;
+  /**
+   * Only for `aria-valuenow` — a screen reader announcing this separator's
+   * current position. The drag/keyboard logic below stays delta-based and
+   * never reads this value itself; see the note above about why.
+   */
+  width: number;
   onResize: (column: ResizableColumn, deltaPx: number) => void;
   onReset: () => void;
 }) {
@@ -90,6 +101,14 @@ export function ColumnResizeHandle({
       role="separator"
       aria-orientation="vertical"
       aria-label={`Resize ${label} column`}
+      // A focusable separator that responds to Arrow keys is functioning as
+      // a slider over the column's width, and per the ARIA spec that means
+      // aria-valuenow is required, not optional — Lighthouse's
+      // `aria-required-attr` audit correctly flagged its absence.
+      aria-valuenow={width}
+      aria-valuemin={MIN_COLUMN_WIDTH}
+      aria-valuemax={MAX_COLUMN_WIDTH}
+      aria-valuetext={`${width} pixels`}
       tabIndex={0}
       className={cn(
         'absolute inset-y-1 right-0 w-2 shrink-0 translate-x-1/2 -translate-y-0 cursor-col-resize touch-none rounded-full select-none',

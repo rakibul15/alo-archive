@@ -346,6 +346,7 @@ export function DocumentsTable({
                 <ColumnResizeHandle
                   column={column.id as ResizableColumn}
                   label={column.label}
+                  width={widths[column.id as ResizableColumn]}
                   onResize={resize}
                   onReset={() => {
                     resetColumn(column.id as ResizableColumn);
