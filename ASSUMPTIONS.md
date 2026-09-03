@@ -78,56 +78,49 @@ knowing what was skipped is different from forgetting it.
 10. **The queue itself is session-scoped; the upload progress underneath it is
     not.** `File` handles genuinely cannot be persisted — that's a browser
     limit, not a choice — so a refresh mid-upload still means re-selecting
-    every file, and that's surfaced honestly (a warning before unload, a
-    banner afterwards) rather than hidden. What changed: uploads are now
-    chunked and resumable (`features/upload/lib/chunked-upload.ts`), with the
-    session id and resume token for each in-flight file persisted to
-    `localStorage`, keyed by name+size+lastModified. Re-selecting the *same*
-    file resumes it from the last part the server actually received instead
-    of re-sending it from byte zero. A different file, or the same file after
-    the one-hour session TTL, just opens a fresh session — there's no
-    incorrect state possible, only a missed optimisation.
+    every file, surfaced honestly (a warning before unload, a banner
+    afterwards) rather than hidden. Uploads are, however, chunked and
+    resumable (`features/upload/lib/chunked-upload.ts`): the session id and
+    resume token for each in-flight file persist to `localStorage`, keyed by
+    name+size+lastModified, so re-selecting the *same* file resumes from the
+    last part the server actually received instead of re-sending from byte
+    zero. A different file, or the same one after the one-hour session TTL,
+    just opens a fresh session — no incorrect state is reachable, only a
+    missed optimisation.
 11. **State is in memory and single-instance.** Restarting the server resets
     the archive. It would not survive a multi-instance deployment; that is the
     correct trade for a prototype and the wrong one for production.
 12. **Modern evergreen browsers only.** No polyfills, no IE-era fallbacks.
-13. <a id="assumption-13"></a>**Uploads are capped at 25 MB and 64 bytes, and to five file types** (PDF,
-    JPEG, PNG, TIFF, HEIC — see `upload-constraints.ts`). No brief mandate
-    behind these numbers; they are a stand-in for "a single scanned form or ID
-    photo," sized well above a real one (a multi-page scanned PDF is typically
-    a few MB) and well below anything that would make an in-browser upload
-    slow enough to need chunking, which is out of scope here. The 64-byte
-    floor exists only to reject empty/near-empty garbage, not legitimately
-    tiny images. Both bounds are enforced identically client-side (instant
-    feedback, and the dropzone helper text states them) and server-side (a
-    client check is not a check). Unlike the simulated-pipeline numbers in
-    assumption 2, these are **not** exposed through `.env.example` — they are
-    a fixed product decision, not a tuning knob for demoing the pipeline.
+13. <a id="assumption-13"></a>**Uploads are capped at 25 MB and 64 bytes, and
+    to five file types** (PDF, JPEG, PNG, TIFF, HEIC — see
+    `upload-constraints.ts`). No brief mandate behind these numbers; they
+    stand in for "a single scanned form or ID photo," sized above a real one
+    and well below anything that would need chunking for browser performance
+    reasons. Enforced identically client-side (instant feedback) and
+    server-side (a client check is not a check). Unlike assumption 2's
+    simulated-pipeline numbers, these are **not** in `.env.example` — a fixed
+    product decision, not a demo knob.
 14. <a id="assumption-14"></a>**Confidence bands are 90% / 75%, and 75%
-    doubles as the review threshold.** `confidenceBand()` reads ≥90% as "high", 75–89% as "medium",
-    below that as "low"; the same 75% line (`REVIEW_THRESHOLD`) decides
-    whether a document is routed to `needs_review`. No brief mandate behind
-    either number — they stand in for "obviously fine" versus "worth a second
-    look," set so the review queue catches genuinely marginal extractions
-    without flooding the operator with anything short of a near-perfect read.
-    Reusing one number for both the band boundary and the routing threshold is
-    deliberate: a field reading "medium" confidence is, by construction,
-    exactly the case the review queue exists for.
+    doubles as the review threshold.** `confidenceBand()` reads ≥90% as
+    "high", 75–89% as "medium", below that as "low"; the same 75% line
+    (`REVIEW_THRESHOLD`) decides routing to `needs_review`. No brief mandate
+    behind either number — they stand in for "obviously fine" versus "worth a
+    second look." Reusing one number for both is deliberate: a "medium"
+    reading is, by construction, exactly the case the review queue exists for.
 15. <a id="assumption-15"></a>**"Documents over 50 pages must be split before
-    upload" is flavour text, not an enforced limit.** `PAGE_LIMIT_EXCEEDED` is one of six error codes
-    the simulation assigns at random to model realistic failure variety (see
-    assumption 2) — nothing here counts an uploaded file's actual pages and
-    rejects it above 50; the fixture generator itself caps simulated PDFs at
-    1–12 pages, well under the number in the message. Worth being explicit
-    about, since it reads like a real, client-enforced constraint the way
-    assumption 13's 25 MB limit actually is, and it is not one.
-16. <a id="assumption-16"></a>**Two minor client defaults, neither tuned
-    against a measurement the way the upload concurrency cap in the README was:** the search box debounces
-    input 300 ms before it reaches the URL/query (`documents-filters.tsx`),
-    and TanStack Query treats a response as fresh for 30 s (`providers.tsx`)
-    before refetching on its own. Ordinary perf defaults, picked once rather
-    than product decisions, listed here only so nothing in the app is a
-    number nobody can account for.
+    upload" is flavour text, not an enforced limit.** `PAGE_LIMIT_EXCEEDED`
+    is one of six error codes the simulation assigns at random to model
+    realistic failure variety (assumption 2) — nothing counts an uploaded
+    file's actual pages, and the fixture generator itself caps simulated PDFs
+    at 1–12 pages. Worth being explicit about since it reads like a real,
+    client-enforced constraint the way assumption 13's 25 MB limit actually
+    is, and it is not one.
+16. <a id="assumption-16"></a>**Two minor client defaults, not tuned against a
+    measurement the way the upload concurrency cap was:** the search box
+    debounces input 300 ms (`documents-filters.tsx`), and TanStack Query
+    treats a response as fresh for 30 s (`providers.tsx`). Ordinary perf
+    defaults, listed here only so nothing in the app is a number nobody can
+    account for.
 
 ## Design tokens
 
@@ -139,76 +132,36 @@ semantic    --background, --destructive  shadcn's set
 domain      --status-failed, --confidence-low   ours
 ```
 
-Components reference the domain and semantic layers only. This is enforced,
-not merely intended:
+Components reference the domain and semantic layers only. Enforced, not
+merely intended: `eslint.config.mjs` rejects raw palette classes and literal
+colour values, and `scripts/check-contrast.mjs` parses `globals.css`,
+resolves `var()` aliases and fails the build if any status or confidence
+token drops below WCAG AA (4.5:1) against its own theme background — it reads
+the stylesheet rather than duplicating values, so it cannot drift.
 
-- `eslint.config.mjs` rejects raw palette classes (`bg-red-500`) and literal
-  colour values (`text-[#f00]`). Token-derived `color-mix()` is allowed,
-  because it is still made of tokens.
-- `scripts/check-contrast.mjs` parses `globals.css`, resolves the `var()`
-  aliases and fails the build if any status or confidence token drops below
-  WCAG AA (4.5:1) against its own theme background. It reads the stylesheet
-  rather than duplicating the values, so it cannot drift.
+Status is never communicated by colour alone — every status carries an icon
+and a text label (WCAG 1.4.1).
 
-Status is never communicated by colour alone — every status carries an icon and
-a text label (WCAG 1.4.1).
+**What the static check cannot see:** it verifies each token in isolation
+against a flat background, but not what a component does with it afterwards.
+A zero-count status tile dimmed with `opacity-60` still passed the check in
+isolation, yet rendered at 3.52:1 against the required 4.5:1 once a real
+browser composited the opacity on top of it — caught by a Lighthouse
+accessibility run against a production build, not by the script. Fixed by
+removing the opacity (the "0" already reads as de-emphasised on its own).
+The same pass caught a genuine layout shift (CLS 0.26 → 0.002): a
+live-updating summary line occasionally wrapped to a second line and pushed
+the page under it; fixed with `truncate`, since a live string should never be
+allowed to change its container's height.
 
-## What the token check cannot see, and what caught it instead
-
-`check-contrast.mjs` verifies every domain token against a flat theme
-background and gates the build on it. It cannot see what happens once a
-component wraps that token in something else — and one did. A zero-count
-status tile (e.g. "Uploading — 0") was dimmed with `opacity-60` to read as
-de-emphasised. CSS `opacity` scales down the alpha of everything in the
-subtree, text included, against whatever sits behind it — so a token that
-passes 8.9:1 in isolation can still render unreadable once a parent opacity is
-applied on top. The script has no way to model that, because it never renders
-anything; it only resolves CSS variables.
-
-A real Lighthouse accessibility audit (`npx lighthouse … --preset=desktop`,
-run against a production build) caught it in ten seconds, walking actual
-ancestor opacity the way a browser does: **3.52:1 against a 4.5:1
-requirement**, on `#496e9d` text over a `#101419` composited background. Fixed
-by removing the opacity — the number "0" already reads as de-emphasised on its
-own, so it did not need a second, contrast-breaking signal stacked on top of
-it. Re-audited clean afterwards, three runs, no variance.
-
-The same audit pass found a genuine layout shift (CLS 0.26 on the overview
-page): the pipeline summary line ("2,400 documents in the archive · 12.3/s
-completing") grows a live throughput suffix as the SSE stream reports it, and
-on a narrow viewport that was sometimes enough extra text to wrap onto a
-second line mid-session, pushing the whole status grid down half a line.
-Fixed with `truncate` on that one element — a live-updating string can never
-be allowed to change the height of its container. CLS afterwards: 0.002,
-attributable to that same element's benign horizontal growth from empty to
-full text, not a vertical shift at all.
-
-Two things this pass also ruled out, worth recording so they are not
-re-litigated: a hypothesis that disabling `<Link prefetch>` on the header nav
-would shrink the JS shipped on `/` turned out to be wrong — the flagged bytes
-were core framework/vendor chunks loaded regardless, verified by diffing the
-actual network requests with prefetch on and off, and the change was reverted
-rather than kept on faith. And an apparent `best-practices` regression
-("errors-in-console", two 500s) traced back to a stray orphaned server process
-still bound to the audit port from an earlier restart — `npm start &`'s
-captured PID is the `npm` wrapper, not the `next-server` child, so `kill`ing it
-does not free the port. Not a code bug; the fix was `lsof -tiTCP:<port> | xargs
-kill` before every re-run, not a source change.
-
-**Lighthouse mobile vs desktop.** The default CLI preset simulates a
-throttled mobile connection and a 4x-slowed CPU — appropriate for a public,
-mobile-first site, and it holds every route here to the low 90s on
-Performance even after the fixes above, entirely on Largest Contentful Paint:
-the breakdown shows time-to-first-byte around 2 ms and element render delay
-around 40 ms, with the remaining ~3 s being simulated network latency applied
-to an internal tool's JS payload, not real slowness. This app's actual
-persona — Nadia, the operations coordinator (see "Who this is for") — works
-from a desktop browser on an ordinary connection, which is what
-`--preset=desktop` models. Audited both ways rather than reporting only the
-flattering one: mobile-simulated sits in the low-to-mid 90s across all three
-routes; desktop is **100/100/100/100 on Performance, Accessibility, Best
-Practices and SEO, on `/`, `/documents` and `/upload`**, confirmed over
-multiple runs.
+**Lighthouse mobile vs desktop.** The CLI's default preset simulates a
+throttled mobile connection and holds every route to the low-to-mid 90s on
+Performance purely from simulated network latency (TTFB is ~2 ms; the rest is
+the preset, not real slowness). This app's actual persona works from a
+desktop browser on an ordinary connection, which `--preset=desktop` models —
+audited both ways rather than reporting only the flattering one. Desktop is
+**100/100/100/100 on Performance, Accessibility, Best Practices and SEO, on
+`/`, `/documents` and `/upload`**, confirmed over multiple runs.
 
 ## TypeScript
 
@@ -226,206 +179,126 @@ multiple runs.
 
 ## Upload progress is real; the storage is not
 
-The upload path is the one request in the app that does not go through the
-shared `fetch` client. `fetch` still cannot report upload progress in any
-shipping browser, so ingest uses `XMLHttpRequest` for its
-`upload.onprogress` events. The bytes are genuinely sent and genuinely
-discarded server-side — the progress bar reflects bytes leaving the machine
-rather than an animation timed to look plausible.
+The upload path is the one request that does not go through the shared
+`fetch` client — `fetch` still cannot report upload progress in any shipping
+browser, so ingest uses `XMLHttpRequest` for `upload.onprogress`. The bytes
+are genuinely sent and genuinely discarded server-side, so the progress bar
+reflects real bytes leaving the machine, not an animation timed to look
+plausible. The ingest route carries a deliberate delay
+(`SIM_INGEST_LATENCY_MS`, 700 ms by default) — over localhost a 2 MB upload
+would otherwise complete too fast to see progress, pause or cancel at all.
 
-The ingest route carries a deliberate delay (`SIM_INGEST_LATENCY_MS`, 700 ms by
-default). Over localhost a 2 MB upload completes in single-digit milliseconds,
-which makes progress, pause and cancel impossible to see and therefore
-impossible to judge.
+Refused files are reported, never dropped: type and size are checked
+client-side (instant feedback, no wasted upload) as well as server-side, and
+anything refused is surfaced with a per-reason breakdown and an itemised list
+(capped at 50 entries; the breakdown itself is tallied as files arrive rather
+than derived from the capped list, so it can't disagree with its own total).
+The "select a folder" path runs the same checks, since a plain file input
+bypasses the dropzone's validation entirely.
 
-**Refused files are reported, never dropped.** The dropzone validates type and
-size client-side as well as server-side — rejecting a 30 MB scan *after* it has
-finished uploading wastes the operator's time and bandwidth — and anything
-refused is surfaced with a per-reason breakdown and an itemised list. Dropping a
-folder of 300 and quietly enqueuing 288 is the worst kind of failure, because it
-looks like success; nobody notices the twelve missing documents until months
-later. The "select a folder" path runs the same checks, since a plain file input
-bypasses the dropzone's validation entirely and a real field folder is full of
-`thumbs.db` and stray spreadsheets.
-
-The breakdown is tallied as files arrive rather than counted off the retained
-list, which is capped at 50 entries — deriving it from the capped list would
-print "300 files were not added: 48 unsupported", and a summary whose parts do
-not sum to its total is worse than no summary.
-
-Two smaller decisions in the queue:
-
-- **Aggregate progress is weighted by bytes, not file count.** Finishing a 1 MB
-  file out of a 1 MB and a 9 MB pair is 10% done, not 50%.
-- **Cancelled files leave the denominator.** Otherwise a batch the operator
-  deliberately stopped reads as permanently stuck at 23% instead of finished.
+Two smaller decisions: aggregate progress is weighted by **bytes**, not file
+count (a 1 MB file finishing out of a 1 MB + 9 MB pair is 10% done, not 50%);
+and cancelled files leave the denominator, so a batch the operator
+deliberately stopped reads as finished rather than stuck.
 
 ## The page is shown next to the fields
 
-The operator's actual job is comparing what the machine read against what is on
-the paper. Without the paper they cannot verify anything — only accept or guess
-— so a review panel showing extracted values alone invites rubber-stamping.
-Every serious tool in this category is a split screen for that reason.
+The operator's actual job is comparing what the machine read against what is
+on the paper — without it they can only accept or guess, so a panel showing
+extracted values alone invites rubber-stamping.
 
-The original scans are not kept (ingest receives the bytes and discards them),
-so the panel renders a stand-in page. The important part is that it is **not
-drawn freehand**: each value is placed inside the bounding box the server
-reported for that field, and the highlight overlay reads the same boxes. The
-preview and the data cannot drift apart because they are the same numbers.
-
-`box` therefore lives on `FieldValue` in the schema, normalised to 0–1 the way
-real extraction services return it (Google Document AI's normalised vertices,
-Rossum's bounding boxes). Working the geometry out in the browser instead would
-have modelled it backwards: where a value sits on the page is something the
-extractor knows and the client cannot.
-
-A missing field has **no box at all** rather than an empty one — there is
-nothing on the page to point at, and drawing a rectangle anyway would be a lie
-about where the extractor looked.
-
-The link runs both ways: hovering or focusing a field highlights its box, and
-clicking a box scrolls to the field. Focus is wired as well as hover, so
-tabbing through the fields moves the highlight too.
+Scans aren't kept, so the panel renders a stand-in page, but it is **not
+drawn freehand**: each value sits inside the bounding box the server reported
+for that field, and the highlight overlay reads the same boxes, so the
+preview and the data cannot drift apart. `box` lives on `FieldValue` in the
+schema, normalised to 0–1 the way real extraction services return it (Google
+Document AI, Rossum) — working the geometry out in the browser would model it
+backwards, since where a value sits on the page is something the extractor
+knows and the client cannot. A missing field has no box at all rather than an
+empty one, since there is nothing on the page to point at.
 
 ## Bulk actions send a query, not an id list
 
-Selection is a mode plus a small exception set — `include` (nothing but these)
-or `exclude` (everything matching the filter but these) — rather than an array
-of selected ids.
+Selection is a mode plus a small exception set — `include` (nothing but
+these) or `exclude` (everything matching the filter but these) — rather than
+an array of selected ids, which breaks the moment somebody ticks "select all"
+against 100,000 rows: building it means fetching every id and holding 100,000
+strings, and "select all, then untick three" is the case it handles worst.
 
-The array version breaks the moment somebody ticks "select all" against 100,000
-matching rows: building it means fetching every id, holding 100,000 strings, and
-posting them back on the next action. And "select all, then untick three" is the
-case it handles worst.
-
-So "retry all 182 failed" posts `{ filter, except: [] }` — 113 bytes, and the
-same 113 bytes at 100,000 rows. The set is resolved on the server, where it
-already lives. `POST /api/documents/retry` accepts either shape.
-
-The response is counts, not ids, broken down by error code, so the UI can say
-"65 re-queued · 117 cannot be retried (27 unsupported file type, 34 file is
-unreadable, 26 password protected, 30 too many pages)" instead of shrugging.
+"Retry all 182 failed" posts `{ filter, except: [] }` — 113 bytes, the same
+at 100,000 rows — and the set is resolved on the server, where it already
+lives. `POST /api/documents/retry` accepts either shape, and the response is
+counts by error code, so the UI can say *why* 117 documents were refused.
 
 ## No headless table library
 
 `@tanstack/react-table` was installed and then removed. The column set is
 fixed, and sorting, filtering and paging all happen on the server, so the
-library would have contributed a layer of state without removing one. What the
-list actually needed was virtualisation, which is a different package.
+library would have added a layer of state without removing one — what the
+list actually needed was virtualisation, a different package.
 
-The rows are therefore a CSS grid with explicit ARIA (`role="grid"`,
-`aria-rowcount`, `aria-rowindex`) rather than a `<table>`. Absolutely
-positioned rows inside a `<tbody>` are unreliable across browsers, and the ARIA
-grid pattern is the one that can honestly say "row 5,231 of 100,000" when only
-thirty rows exist in the DOM.
+The rows are a CSS grid with explicit ARIA (`role="grid"`, `aria-rowcount`,
+`aria-rowindex`) rather than a `<table>`: absolutely positioned rows inside a
+`<tbody>` are unreliable across browsers, and the ARIA grid pattern is the
+one that can honestly say "row 5,231 of 100,000" when only thirty rows exist
+in the DOM.
 
 ## Environment variables
 
 Every variable is optional and the app runs with no `.env` file. Unknown
-variables are ignored (a Zod object strips keys it does not know), and invalid
-values log a warning and fall back to the default instead of throwing.
+variables are ignored (a Zod object strips keys it does not know), and
+invalid values log a warning and fall back to the default instead of
+throwing — the opposite of what a production service should do (fail fast on
+boot), inverted on purpose since this is a prototype somebody else has to be
+able to run on the first attempt.
 
-That is the opposite of what a production service should do — it should fail
-fast on boot. The trade is inverted on purpose: this is a prototype somebody
-else has to be able to run on the first attempt, and dropping an existing
-`.env` into the directory must not break it.
-
-## Four more Lighthouse findings that don't change the 100s, checked anyway
-
-None of these carry any category weight — the desktop scores above were
-already 100 with all four present — but "doesn't move the score" and "I looked
-into it" are different claims, so here is the second one:
-
-- **Render-blocking CSS, ~80 ms.** The single compiled Tailwind stylesheet for
-  the whole app — every route, every shadcn component (92 KB source, 16 KB
-  transferred, a normal ~5.7x gzip ratio). Cutting this further means critical-
-  CSS extraction or per-route CSS splitting, disproportionate effort for 80 ms
-  on a prototype.
-- **"Legacy JavaScript", ~13 KB.** Traced to source rather than assumed:
-  `node_modules/next/dist/build/polyfills/polyfill-module.js`. This ships in
-  every Next.js 16 app regardless of `browserslist` config (there isn't one
-  here — Next's modern-evergreen default applies) and regardless of whether
-  `core-js` is even installed (it isn't). Not a project-level choice to undo.
-- **Layout shift culprits.** CLS is 0 (score 1) on all three routes, reverified
-  after a machine sleep interrupted the first pass. The one shift Lighthouse
-  still lists on the overview page is the same benign, ~0.002-magnitude,
-  purely horizontal one described above (the summary line's text growing from
-  empty to full width) — not a new issue.
-- **Network dependency tree.** Lighthouse's own `metricSavings` for this audit
-  is `{"LCP": 0}` — by its own accounting there is nothing to save here; it is
-  a request-chain visualisation, not an opportunity.
-
-## A keyboard-and-accessibility-tree audit, and why it isn't literally a screen reader
+## A keyboard-and-accessibility-tree audit, beyond Lighthouse
 
 Lighthouse's accessibility score is automated `axe-core` rules — real, but
-documented (by axe's own maintainers) to catch a minority of real-world WCAG
-issues. The categories it structurally can't check are exactly the ones that
-matter most to an actual assistive-technology user: is the tab order the one
-a sighted user's eye would follow, does focus land somewhere sensible when a
-panel opens, does it come back to where it left off when the panel closes,
-do dynamic updates get announced. None of that shows up as a Lighthouse
-score.
+documented by axe's own maintainers to catch a minority of real-world WCAG
+issues. The categories it can't check are exactly the ones that matter most
+to an assistive-technology user: correct tab order, sensible focus on open
+and close, live-region announcements for dynamic updates.
 
-What this pass could not do: this machine has no screen reader software set
-up to drive (VoiceOver requires Accessibility permissions this environment
-doesn't have granted, and there's no NVDA/JAWS install), so nothing here is
-a claim of having listened to real assistive-technology output. What it did
-instead — reading the same accessibility tree a screen reader consumes via
-the browser's own accessibility API, and driving real keyboard events rather
-than a mouse, across all three routes:
+This machine has no screen reader set up to drive (VoiceOver needs
+Accessibility permissions this environment doesn't have; no NVDA/JAWS
+install), so nothing here claims to have listened to real assistive-tech
+output. What was checked instead, across all three routes: the same
+accessibility tree a screen reader consumes via the browser's own
+accessibility API, and real keyboard events rather than simulated clicks.
 
-- **Tab order**, checked two ways on purpose. A first pass using simulated
-  `Tab` keypresses showed an apparently broken order on `/` — focus landing
-  on "Load 100,000 documents" *before* the header navigation. Rather than
-  report that as a finding, it was cross-checked against the raw DOM order
-  of every focusable element (with zero elements carrying a positive
-  `tabindex`, DOM order *is* tab order, independent of any keystroke
-  simulation): the DOM order was correct — header, then status tiles, then
-  the scale button. The first result was a browser-automation artifact
-  (something ahead of the page consuming the first few keypresses), not a
-  page bug. `/documents` and `/upload` were checked the same DOM-order way
-  and are both correct: nav, then filters, then each table column's sort
-  button immediately followed by its resize handle, in visual left-to-right
-  order.
-- **Sheet focus-trap on open.** Deep-linking straight to a document
-  (`?doc=...`) — the harder case, since there's no click to have set focus
-  first — lands focus inside the sheet (Radix's default), not left behind
-  on the page underneath.
-- **The one hand-rolled focus-management path** — `FieldRow`'s
-  Escape-cancels-the-edit-without-closing-the-sheet behaviour, documented
-  in its own comment as exactly the kind of logic a library doesn't give you
-  for free. Verified against the real DOM, not just read: clicking "Fix"
-  moved focus into the input (confirmed via `document.activeElement`),
-  pressing Escape left the sheet open and moved focus back to the "Fix"
-  button, matching the comment's claim exactly.
-- **Live regions.** The table footer's row count and the upload queue's
+- **Tab order** — verified against raw DOM order (with zero elements
+  carrying a positive `tabindex`, DOM order *is* tab order): correct on all
+  three routes, including the one hand-rolled focus-management path in the
+  app (`FieldRow`'s Escape-cancels-without-closing-the-sheet behaviour),
+  confirmed against `document.activeElement` rather than just read from the
+  source.
+- **Sheet focus-trap on open**, including the harder case of deep-linking
+  straight to a document (`?doc=...`) with no click to have set focus first —
+  lands inside the sheet, not left behind on the page underneath.
+- **Live regions** — the table footer's row count and the upload queue's
   progress summary both carry `aria-live="polite"`, confirmed present in the
-  rendered DOM rather than assumed from the source.
+  rendered DOM.
 
-Nothing here needed fixing — which is itself worth stating plainly rather
-than padding this section to look more thorough than the result was.
+Nothing here needed fixing.
 
 ## What is mocked, and what the real thing would be
 
 The mock lives entirely behind `src/lib/api/client.ts`. No component imports
 anything below it, so swapping it for a real service is a change to one file.
 
-A production version would be: presigned S3 multipart upload straight from the
-browser, an ingest queue feeding an OCR worker pool, Postgres holding
+A production version would be: presigned S3 multipart upload straight from
+the browser, an ingest queue feeding an OCR worker pool, Postgres holding
 `document` and `extracted_field` rows, and workers pushing status back over a
-websocket or webhook. The frontend contract here was designed against that
-shape — cursor pagination, id-only change events, per-field confidence — so the
-swap does not require reshaping the UI.
+websocket or webhook. The frontend contract here — cursor pagination,
+id-only change events, per-field confidence — was designed against that
+shape, so the swap does not require reshaping the UI.
 
 Upload is the one piece of that shape actually built, not just designed
-against: `POST /api/uploads/sessions` opens a session and hands back an
-opaque id and resume token, `PUT .../parts/:n` receives each chunk, `POST
-.../complete` finalises it — the same three-step shape S3's own multipart API
-uses, `CreateMultipartUpload` / `UploadPart` / `CompleteMultipartUpload`. What
-stays mocked is *where* the bytes go: today's routes receive and discard them
-same as the old single-shot endpoint did; a real swap points the client at
-presigned S3 URLs instead of same-origin routes and has S3 do the reassembly,
-which is a change to `chunked-upload.ts`'s three fetch calls, not to the
-resumability model itself — the session/part/complete shape, the resume
-token, and the client-side fingerprint-keyed resume registry all carry over
-unchanged.
+against: `POST /api/uploads/sessions` → `PUT .../parts/:n` → `POST
+.../complete` is the same three-step shape S3's own multipart API uses
+(`CreateMultipartUpload` / `UploadPart` / `CompleteMultipartUpload`). What
+stays mocked is *where* the bytes go — today's routes receive and discard
+them; a real swap points the client at presigned S3 URLs and lets S3 do the
+reassembly, a change to `chunked-upload.ts`'s three fetch calls, not to the
+resumability model itself.
