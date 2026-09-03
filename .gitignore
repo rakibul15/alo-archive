@@ -53,6 +53,11 @@ yarn-error.log*
 # local editor / agent tooling
 .claude/
 .idea/
+# next dev re-creates this itself on every run (see
+# node_modules/next/dist/server/lib/generate-agent-files.js) — local-only
+# tooling notes, not part of the submission
+AGENTS.md
+CLAUDE.md
 
 # vercel
 .vercel
