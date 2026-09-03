@@ -1,4 +1,0 @@
-allowBuilds:
-  unrs-resolver: set this to true or false
-minimumReleaseAgeExclude:
-  - lucide-react@1.39.0

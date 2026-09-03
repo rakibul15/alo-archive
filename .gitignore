@@ -14,6 +14,7 @@
 # lockfile that's meant to be committed; a stray pnpm-lock.yaml or
 # yarn.lock from someone's local tooling should never land in git
 pnpm-lock.yaml
+pnpm-workspace.yaml
 yarn.lock
 
 # CLI Lighthouse writes one of these to the cwd by default whenever
@@ -51,6 +52,7 @@ yarn-error.log*
 
 # local editor / agent tooling
 .claude/
+.idea/
 
 # vercel
 .vercel
