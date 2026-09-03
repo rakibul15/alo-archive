@@ -39,7 +39,7 @@ That is the whole setup. There is no `.env` file to create, no database, no
 services to start. Node 20.9+ (`.nvmrc` pins 22).
 
 ```bash
-npm run verify   # lint, types, colour contrast, tests, production build
+npm run verify   # lint, formatting, types, colour contrast, tests, production build
 ```
 
 | Script | What it does |
