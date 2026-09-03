@@ -311,6 +311,24 @@ export function pickNext(state: QueueState, now = Date.now()): string[] {
   return ready;
 }
 
+/**
+ * The names of everything still in flight, in queue order.
+ *
+ * Used for the interrupted-batch breadcrumb: "3 uploads didn't finish" tells
+ * an operator *that* something is missing, not what to go and re-select.
+ * Names, not ids — the id is meaningless once the page has reloaded and the
+ * `File` handles are gone; the name is the one thing the operator can
+ * actually search their folder for.
+ */
+export function pendingNames(state: QueueState): string[] {
+  const names: string[] = [];
+  for (const id of state.order) {
+    const item = state.items.get(id);
+    if (item && isActive(item)) names.push(item.name);
+  }
+  return names;
+}
+
 /* -------------------------------------------------------------------------
  * Aggregates
  * ---------------------------------------------------------------------- */

@@ -1,12 +1,25 @@
 'use client';
 
-import { useEffect, useSyncExternalStore } from 'react';
-import { summarise } from '../lib/queue';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
+import { pendingNames, summarise } from '../lib/queue';
 import { useUploadStore } from '../store';
 
 const STORAGE_KEY = 'alo.upload.interrupted';
 
-type InterruptedBatch = { pending: number; at: string };
+/**
+ * Names beyond this are still counted in `pending`, just not spelled out —
+ * the banner is one line, not a file browser, and "47 uploads didn't
+ * finish: a.pdf, b.pdf, c.pdf and 44 more" says everything a longer list
+ * would.
+ */
+const MAX_REPORTED_NAMES = 5;
+
+type InterruptedBatch = { pending: number; names: string[]; at: string };
 
 /* -------------------------------------------------------------------------
  * The breadcrumb, as an external store.
@@ -31,7 +44,16 @@ function parseBreadcrumb(raw: string): InterruptedBatch | null {
       'at' in parsed &&
       typeof parsed.at === 'string'
     ) {
-      return { pending: parsed.pending, at: parsed.at };
+      // `names` is newer than `pending`/`at` — a breadcrumb written by an
+      // older build of this app (or corrupted) still parses, it just has
+      // nothing to list, same as a batch of one anonymous file would.
+      const names =
+        'names' in parsed &&
+        Array.isArray(parsed.names) &&
+        parsed.names.every((n) => typeof n === 'string')
+          ? parsed.names
+          : [];
+      return { pending: parsed.pending, names, at: parsed.at };
     }
   } catch {
     // A malformed breadcrumb is not worth surfacing.
@@ -79,6 +101,17 @@ export function useInterruptedBatch() {
   const summary = summarise(queue);
   const pending = summary.queued + summary.uploading + summary.retrying;
 
+  // A ref, not a dependency: `queue` gets a new reference on every progress
+  // tick (many times a second mid-upload), and re-running this effect that
+  // often just to catch the rare case where the *set* of pending items
+  // changed without `pending`'s count changing would defeat the point of
+  // keying the effect on `pending` at all. The ref always has the latest
+  // queue by the time the effect body actually runs.
+  const queueRef = useRef(queue);
+  useLayoutEffect(() => {
+    queueRef.current = queue;
+  });
+
   useEffect(() => {
     if (pending === 0) {
       sessionStorage.removeItem(STORAGE_KEY);
@@ -87,7 +120,11 @@ export function useInterruptedBatch() {
 
     sessionStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ pending, at: new Date().toISOString() }),
+      JSON.stringify({
+        pending,
+        names: pendingNames(queueRef.current).slice(0, MAX_REPORTED_NAMES),
+        at: new Date().toISOString(),
+      }),
     );
 
     const onBeforeUnload = (event: BeforeUnloadEvent) => {

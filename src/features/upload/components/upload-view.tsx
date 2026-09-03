@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { documentKeys } from '@/features/documents/api/keys';
 import { useInterruptedBatch } from '../hooks/use-interrupted-batch';
+import { formatPendingNames } from '../lib/format';
 import { useUploadStore } from '../store';
 import { BatchSummaryCard } from './batch-summary-card';
 import { UploadDropzone } from './upload-dropzone';
@@ -64,6 +65,11 @@ export function UploadView() {
               resumes them from the last part the server actually received,
               rather than sending them from scratch.
             </p>
+            {interrupted.names.length > 0 ? (
+              <p className="mt-1 font-mono text-xs text-muted-foreground">
+                {formatPendingNames(interrupted.names, interrupted.pending)}
+              </p>
+            ) : null}
             <Button
               size="sm"
               variant="outline"

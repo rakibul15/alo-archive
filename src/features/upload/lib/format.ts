@@ -19,3 +19,18 @@ export function formatDuration(seconds: number): string {
   const hours = Math.floor(minutes / 60);
   return `${hours}h ${minutes % 60}m`;
 }
+
+/**
+ * "invoice.pdf, scan-2.pdf and 3 more" — `names` is already capped to what
+ * the caller is willing to list; `total` is the real count, which can be
+ * larger. Used for the interrupted-batch banner, where the point is telling
+ * the operator what to go and find, not just how many.
+ */
+export function formatPendingNames(
+  names: readonly string[],
+  total: number,
+): string {
+  const remaining = total - names.length;
+  const listed = names.join(', ');
+  return remaining > 0 ? `${listed} and ${remaining} more` : listed;
+}

@@ -232,6 +232,13 @@ server actually acknowledged; a different file, or the same one after the
 session's one-hour TTL, just opens a fresh session — there's no incorrect
 state reachable, only a missed optimisation.
 
+Resuming being possible only helps if the operator knows what to re-select,
+so the interrupted-batch banner now names names — up to five, with an "and
+N more" tail beyond that — instead of just a count. `pendingNames()` reads
+them straight from the queue before the `beforeunload` breadcrumb is
+written, in the same effect, so the list can never disagree with what
+`pending` is counting.
+
 The existing per-file retry-with-backoff didn't need to change to get resume
 for free: a retry just calls the upload function again, and because that
 function already checks for a resumable session before sending anything, an
@@ -384,9 +391,3 @@ reading the source:
 ## What I would do with more time
 
 - Move file enumeration and hashing off the main thread into a Web Worker.
-- Persist upload intent (not the `File` handles, which cannot be persisted) so
-  a refresh mid-batch can tell you exactly *which* files to re-select — the
-  interrupted-batch banner still only says how many, not their names, even
-  though re-selecting the right ones now resumes them (see "Uploads are
-  chunked and resumable" below).
-- An accessibility audit with a real screen reader rather than by inspection.

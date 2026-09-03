@@ -9,6 +9,7 @@ import {
   markProgress,
   markSucceeded,
   markUploading,
+  pendingNames,
   pickNext,
   retryAllFailed,
   setPaused,
@@ -231,5 +232,31 @@ describe('clearFinished', () => {
     state = clearFinished(state);
     expect(state.order).toEqual(['id-1', 'id-2']);
     expect(state.items.has('id-0')).toBe(false);
+  });
+});
+
+describe('pendingNames', () => {
+  it('returns the names of queued, uploading and retrying items, in order', () => {
+    let state = queueOf(3);
+    state = markUploading(state, 'id-1');
+
+    expect(pendingNames(state)).toEqual(['f0.pdf', 'f1.pdf', 'f2.pdf']);
+  });
+
+  it('excludes succeeded, failed and cancelled items', () => {
+    let state = queueOf(4);
+    state = markUploading(state, 'id-0');
+    state = markSucceeded(state, 'id-0', 'ALO-1');
+    state = markUploading(state, 'id-1');
+    state = markFailed(state, 'id-1', { message: 'nope', retryable: false }, 0);
+    state = cancelItem(state, 'id-2');
+
+    expect(pendingNames(state)).toEqual(['f3.pdf']);
+  });
+
+  it('returns an empty list once nothing is pending', () => {
+    expect(
+      pendingNames(createQueue({ maxParallel: 3, maxAttempts: 3 })),
+    ).toEqual([]);
   });
 });
