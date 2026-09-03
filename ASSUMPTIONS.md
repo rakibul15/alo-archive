@@ -355,6 +355,56 @@ into it" are different claims, so here is the second one:
   is `{"LCP": 0}` — by its own accounting there is nothing to save here; it is
   a request-chain visualisation, not an opportunity.
 
+## A keyboard-and-accessibility-tree audit, and why it isn't literally a screen reader
+
+Lighthouse's accessibility score is automated `axe-core` rules — real, but
+documented (by axe's own maintainers) to catch a minority of real-world WCAG
+issues. The categories it structurally can't check are exactly the ones that
+matter most to an actual assistive-technology user: is the tab order the one
+a sighted user's eye would follow, does focus land somewhere sensible when a
+panel opens, does it come back to where it left off when the panel closes,
+do dynamic updates get announced. None of that shows up as a Lighthouse
+score.
+
+What this pass could not do: this machine has no screen reader software set
+up to drive (VoiceOver requires Accessibility permissions this environment
+doesn't have granted, and there's no NVDA/JAWS install), so nothing here is
+a claim of having listened to real assistive-technology output. What it did
+instead — reading the same accessibility tree a screen reader consumes via
+the browser's own accessibility API, and driving real keyboard events rather
+than a mouse, across all three routes:
+
+- **Tab order**, checked two ways on purpose. A first pass using simulated
+  `Tab` keypresses showed an apparently broken order on `/` — focus landing
+  on "Load 100,000 documents" *before* the header navigation. Rather than
+  report that as a finding, it was cross-checked against the raw DOM order
+  of every focusable element (with zero elements carrying a positive
+  `tabindex`, DOM order *is* tab order, independent of any keystroke
+  simulation): the DOM order was correct — header, then status tiles, then
+  the scale button. The first result was a browser-automation artifact
+  (something ahead of the page consuming the first few keypresses), not a
+  page bug. `/documents` and `/upload` were checked the same DOM-order way
+  and are both correct: nav, then filters, then each table column's sort
+  button immediately followed by its resize handle, in visual left-to-right
+  order.
+- **Sheet focus-trap on open.** Deep-linking straight to a document
+  (`?doc=...`) — the harder case, since there's no click to have set focus
+  first — lands focus inside the sheet (Radix's default), not left behind
+  on the page underneath.
+- **The one hand-rolled focus-management path** — `FieldRow`'s
+  Escape-cancels-the-edit-without-closing-the-sheet behaviour, documented
+  in its own comment as exactly the kind of logic a library doesn't give you
+  for free. Verified against the real DOM, not just read: clicking "Fix"
+  moved focus into the input (confirmed via `document.activeElement`),
+  pressing Escape left the sheet open and moved focus back to the "Fix"
+  button, matching the comment's claim exactly.
+- **Live regions.** The table footer's row count and the upload queue's
+  progress summary both carry `aria-live="polite"`, confirmed present in the
+  rendered DOM rather than assumed from the source.
+
+Nothing here needed fixing — which is itself worth stating plainly rather
+than padding this section to look more thorough than the result was.
+
 ## What is mocked, and what the real thing would be
 
 The mock lives entirely behind `src/lib/api/client.ts`. No component imports

@@ -369,6 +369,20 @@ Then audit `http://localhost:3000` (and `/documents`, `/upload`) one of two ways
   from Incognito, and dropped to Performance 87 (CLS 0.26) from a normal,
   extension-carrying Chrome profile on the same machine.
 
+### Beyond Lighthouse: tab order, focus management, live regions
+
+A 100 accessibility score is `axe-core`'s automated rules passing — real,
+but not the same claim as "works for someone tabbing through it with focus
+on." That needed a separate pass: real keyboard events (not simulated
+clicks) and the actual accessibility tree the browser hands to assistive
+tech, across all three routes. `ASSUMPTIONS.md` has the full account,
+including a first result that looked like a broken tab order on `/` and
+turned out, on cross-checking against raw DOM order, to be a browser-
+automation artifact rather than a page bug — and the one hand-rolled focus-
+management path in this app (`FieldRow`'s Escape-cancels-the-edit-without-
+closing-the-sheet behaviour) verified against `document.activeElement`,
+not just read from the source.
+
 ## Assumptions and trade-offs
 
 In [`ASSUMPTIONS.md`](./ASSUMPTIONS.md) — what was assumed, what was
