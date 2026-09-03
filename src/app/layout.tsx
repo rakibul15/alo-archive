@@ -35,7 +35,18 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
         height so the virtualised list can own its own scroll container instead
         of scrolling the window.
       */}
-      <body className="flex h-full flex-col bg-background text-foreground">
+      <body
+        // Same reasoning as `<html>`'s, one tag down: browser extensions
+        // (ColorZilla's `cz-shortcut-listen`, Grammarly, password managers)
+        // routinely write attributes onto `<body>` before React hydrates.
+        // That's a real DOM difference React would otherwise warn about,
+        // but it's not a bug this app can fix or even detect — it depends
+        // entirely on what a given visitor has installed, not on anything
+        // rendered here. `suppressHydrationWarning` isn't inherited from
+        // the `<html>` tag above, so it needs stating again on this one.
+        suppressHydrationWarning
+        className="flex h-full flex-col bg-background text-foreground"
+      >
         <Providers>
           <AppHeader />
           {children}
