@@ -180,7 +180,13 @@ export function FieldRow({
             <div className="flex items-start justify-between gap-2">
               <p
                 className={cn(
-                  'text-sm break-words',
+                  // `min-w-0` is load-bearing, not decorative: a flex item's
+                  // default minimum width is its content's natural unwrapped
+                  // size, so without it `break-words` never gets the chance
+                  // to do anything — the item just refuses to shrink and
+                  // pushes the Edit/Fix button out past the sheet's edge on
+                  // a narrow viewport instead of wrapping.
+                  'min-w-0 text-sm break-words',
                   field.value === null && 'text-muted-foreground italic',
                 )}
               >
